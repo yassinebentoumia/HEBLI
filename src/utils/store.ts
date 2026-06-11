@@ -403,6 +403,23 @@ export function getConversation(conversationId: string): ChatMessage[] {
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
 
+// Owner-only: delete a single chat message
+export function deleteChatMessage(id: string): void {
+  recordDeletion(KEYS.chat, id);
+  const remaining = getChatMessages().filter((m) => m.id !== id);
+  atomicWrite(KEYS.chat, remaining);
+}
+
+// Owner-only: delete an entire conversation
+export function deleteConversation(conversationId: string): number {
+  const all = getChatMessages();
+  const toDelete = all.filter((m) => m.conversationId === conversationId);
+  toDelete.forEach((m) => recordDeletion(KEYS.chat, m.id));
+  const remaining = all.filter((m) => m.conversationId !== conversationId);
+  atomicWrite(KEYS.chat, remaining);
+  return toDelete.length;
+}
+
 // ============================================================
 // Tickets (client → owner support requests)
 // ============================================================
