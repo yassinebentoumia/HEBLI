@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
-import { getActiveProducts, getCategories, getCategoryIcon, addOrder, addAuditLog } from '@/utils/store';
+import { getActiveProducts, getCategories, getCategoryIcon, addOrder, addAuditLog, addNotification } from '@/utils/store';
 import type { Product, CartItem, Category } from '@/types';
 
 export default function Menu() {
@@ -21,6 +21,7 @@ export default function Menu() {
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [clientName, setClientName] = useState('');
+  const [orderNote, setOrderNote] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [finalTotal, setFinalTotal] = useState(0);
@@ -87,6 +88,7 @@ export default function Menu() {
       items: [...cart],
       total,
       status: 'Pending' as const,
+      note: orderNote.trim() || undefined,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -98,9 +100,29 @@ export default function Menu() {
       user: clientName.trim(),
       timestamp: new Date().toISOString(),
     });
+    // Notify barista AND cashier of the new order
+    addNotification({
+      id: 'ntf-' + Date.now() + '-b',
+      target: 'Barista',
+      title: 'New Order',
+      body: `${id} from ${clientName.trim()} • ${total.toFixed(2)} DT`,
+      type: 'order',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+    addNotification({
+      id: 'ntf-' + Date.now() + '-c',
+      target: 'Cashier',
+      title: 'New Order',
+      body: `${id} from ${clientName.trim()} • ${total.toFixed(2)} DT`,
+      type: 'order',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
     localStorage.setItem('hebli_client_name', clientName.trim());
     setOrderId(id);
     setFinalTotal(total);
+    setOrderNote('');
     setOrderPlaced(true);
     setCart([]);
     setClientName('');
@@ -401,13 +423,20 @@ export default function Menu() {
                       <span className="text-white/40">Total</span>
                       <span className="text-2xl font-bold">{total.toFixed(2)} DT</span>
                     </div>
-                    <div>
+                    <div className="space-y-3">
                       <input
                         type="text"
                         placeholder="Your name"
                         value={clientName}
                         onChange={e => setClientName(e.target.value)}
                         className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20"
+                      />
+                      <textarea
+                        placeholder="Add a note (e.g. no sugar, extra hot, oat milk...)"
+                        value={orderNote}
+                        onChange={e => setOrderNote(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 resize-none"
                       />
                     </div>
                     <button

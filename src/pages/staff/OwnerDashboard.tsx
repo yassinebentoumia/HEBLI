@@ -3,13 +3,13 @@
 // ============================================================
 
 import { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
   Users,
   Package,
   TrendingUp,
-  LogOut,
   Plus,
   Edit,
   Trash2,
@@ -25,6 +25,11 @@ import {
   Zap,
   Shield,
   PackageOpen,
+  MessageCircle,
+  LifeBuoy,
+  Clock,
+  CircleDot,
+  Bell,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -66,7 +71,14 @@ import {
   updateCategory,
   deleteCategory,
   computeAnalytics,
+  getTickets,
+  updateTicket,
+  getSessions,
+  getStaffDayDuration,
+  addNotification,
 } from '@/utils/store';
+import StaffTopBar from '@/components/StaffTopBar';
+import ChatPanel from '@/components/ChatPanel';
 import type {
   Product,
   Staff,
@@ -74,12 +86,13 @@ import type {
   InventoryTransaction,
   AuditLog,
   Category,
+  Ticket,
   StaffRole,
 } from '@/types';
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'analytics' | 'assistant' | 'logs';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -88,6 +101,8 @@ const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'staff', label: 'Staff', icon: Users },
   { key: 'inventory', label: 'Inventory', icon: PackageOpen },
   { key: 'analytics', label: 'Analytics', icon: TrendingUp },
+  { key: 'chat', label: 'Team Chat', icon: MessageCircle },
+  { key: 'tickets', label: 'Tickets', icon: LifeBuoy },
   { key: 'assistant', label: 'AI Assistant', icon: Sparkles },
   { key: 'logs', label: 'Audit Logs', icon: FileText },
 ];
@@ -111,6 +126,8 @@ export default function OwnerDashboard() {
       case 'staff': return <StaffTab />;
       case 'inventory': return <InventoryTab />;
       case 'analytics': return <AnalyticsTab />;
+      case 'chat': return <TeamChatTab />;
+      case 'tickets': return <TicketsTab />;
       case 'assistant': return <AIAssistantTab />;
       case 'logs': return <AuditLogsTab />;
       default: return null;
@@ -121,31 +138,26 @@ export default function OwnerDashboard() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-600">
-              <Shield className="h-5 w-5 text-black" />
+        <div className="mx-auto flex max-w-7xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-600 flex-shrink-0">
+              <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-black" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-[#D4AF37]">HEBLI</span> Owner
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
+                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Owner</span>
               </h1>
-              <p className="text-xs text-white/30">{user?.name} • Administrator</p>
+              <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
           </div>
 
           <div className="flex-1" />
 
-          <button
-            onClick={() => { logoutUser(); navigate('/staff'); }}
-            className="rounded-xl p-2 text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
+          <StaffTopBar onLogout={() => { logoutUser(); navigate('/staff'); }} />
         </div>
 
         {/* Tab Navigation */}
-        <div className="mx-auto max-w-7xl px-4 pb-2 flex gap-1 overflow-x-auto">
+        <div className="mx-auto max-w-7xl px-3 sm:px-4 pb-2 flex gap-1 overflow-x-auto scrollbar-hide">
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -163,7 +175,7 @@ export default function OwnerDashboard() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6">
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[...Array(4)].map((_, i) => <SkeletonStat key={i} />)}
@@ -727,14 +739,50 @@ function CategoriesTab() {
 // Staff Tab
 // ============================================================
 
+function fmtDur(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 function StaffTab() {
+  const { user, addLog } = useApp();
   const [staff, setStaff] = useState<Staff[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editStaff, setEditStaff] = useState<Staff | null>(null);
-  const { addLog } = useApp();
   const [form, setForm] = useState({ name: '', role: 'Barista' as StaffRole, pin: '', email: '' });
+  const [, setTick] = useState(0);
+  // Private notification modal
+  const [notifTarget, setNotifTarget] = useState<Staff | null>(null);
+  const [notifText, setNotifText] = useState('');
+  // Private chat drawer
+  const [chatStaff, setChatStaff] = useState<Staff | null>(null);
 
-  useEffect(() => { setStaff(getStaff()); }, []);
+  const today = new Date().toISOString().split('T')[0];
+  const activeIds = getSessions().filter((s) => s.active).map((s) => s.staffId);
+
+  useEffect(() => {
+    setStaff(getStaff());
+    const int = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(int);
+  }, []);
+
+  const sendNotif = () => {
+    if (!notifTarget || !notifText.trim()) return;
+    addNotification({
+      id: 'ntf-' + Date.now(),
+      target: notifTarget.name,
+      title: `Message from ${user?.name || 'Owner'}`,
+      body: notifText.trim(),
+      type: 'message',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+    addLog('Notification Sent', `To ${notifTarget.name}: ${notifText.trim()}`);
+    setNotifTarget(null);
+    setNotifText('');
+  };
 
   const openNew = () => {
     setEditStaff(null);
@@ -801,15 +849,34 @@ function StaffTab() {
                     <p className="text-xs text-white/40">{s.role}</p>
                   </div>
                 </div>
-                <span className={`text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full ${s.active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {s.active ? 'Active' : 'Suspended'}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className={`text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full ${s.active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {s.active ? 'Active' : 'Suspended'}
+                  </span>
+                  {activeIds.includes(s.id) && (
+                    <span className="text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 flex items-center gap-1">
+                      <CircleDot className="h-2.5 w-2.5 animate-pulse" /> On Duty
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="mt-3 text-xs text-white/30">
+              <div className="mt-3 text-xs text-white/30 space-y-1">
                 <div>PIN: {s.pin}</div>
                 {s.email && <div>Email: {s.email}</div>}
+                <div className="flex items-center gap-1.5 text-amber-400/80">
+                  <Clock className="h-3 w-3" />
+                  Worked today: <span className="font-mono font-semibold">{fmtDur(getStaffDayDuration(s.id, today))}</span>
+                </div>
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button onClick={() => setNotifTarget(s)} className="rounded-lg border border-[#D4AF37]/20 bg-[#D4AF37]/5 py-1.5 text-xs text-[#D4AF37] hover:bg-[#D4AF37]/10 transition-colors flex items-center justify-center gap-1">
+                  <Bell className="h-3 w-3" /> Notify
+                </button>
+                <button onClick={() => setChatStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
+                  <MessageCircle className="h-3 w-3" /> Chat
+                </button>
+              </div>
+              <div className="mt-2 flex gap-2">
                 <button onClick={() => openEdit(s)} className="flex-1 rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/50 hover:text-white hover:border-white/20 transition-colors">
                   <Edit className="h-3 w-3 inline mr-1" /> Edit
                 </button>
@@ -874,6 +941,83 @@ function StaffTab() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Private Notification Modal — PORTAL */}
+      {createPortal(
+        <AnimatePresence>
+          {notifTarget && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+              onClick={() => setNotifTarget(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold flex items-center gap-2"><Bell className="h-5 w-5 text-[#D4AF37]" /> Notify {notifTarget.name}</h3>
+                  <button onClick={() => setNotifTarget(null)} className="rounded-lg p-1 text-white/30 hover:text-white"><X className="h-5 w-5" /></button>
+                </div>
+                <textarea
+                  placeholder="Write a private message / notification..."
+                  value={notifText} onChange={(e) => setNotifText(e.target.value)} rows={4}
+                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none resize-none"
+                />
+                <div className="mt-4 flex gap-3">
+                  <GoldButton variant="outline" className="flex-1" onClick={() => setNotifTarget(null)}>Cancel</GoldButton>
+                  <GoldButton className="flex-1" onClick={sendNotif}>Send Notification</GoldButton>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* Private Chat Drawer (Owner ↔ Staff) — PORTAL */}
+      {createPortal(
+        <AnimatePresence>
+          {chatStaff && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm"
+                onClick={() => setChatStaff(null)}
+              />
+              <motion.div
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+              >
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15">
+                      <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold">{chatStaff.name}</h2>
+                      <p className="text-xs text-white/40">{chatStaff.role}</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setChatStaff(null)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]"><X className="h-5 w-5" /></button>
+                </div>
+                <div className="flex-1 p-4 overflow-hidden flex flex-col min-h-0">
+                  <ChatPanel
+                    conversationId={`dm:${chatStaff.id}`}
+                    senderName={user?.name || 'Owner'}
+                    senderRole={user?.role || 'Administrator'}
+                    heightClass="flex-1 min-h-0"
+                    emptyText={`Private chat with ${chatStaff.name}`}
+                  />
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1434,6 +1578,181 @@ function AuditLogsTab() {
           <div className="py-12 text-center text-white/20">No audit logs yet</div>
         )}
       </GlassCard>
+    </div>
+  );
+}
+
+// ============================================================
+// Team Chat Tab (Owner)
+// ============================================================
+
+function TeamChatTab() {
+  const { user } = useApp();
+  return (
+    <div className="max-w-3xl mx-auto">
+      <GlassCard hover={false}>
+        <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4 flex items-center gap-2">
+          <MessageCircle className="h-4 w-4 text-[#D4AF37]" /> Team Group Chat
+          <span className="ml-auto text-[10px] text-white/25 normal-case tracking-normal">Barista · Cashier · Owner</span>
+        </h3>
+        <ChatPanel
+          conversationId="group"
+          senderName={user?.name || 'Owner'}
+          senderRole={user?.role || 'Administrator'}
+          heightClass="h-[460px]"
+          emptyText="Team group chat — start the conversation!"
+        />
+      </GlassCard>
+    </div>
+  );
+}
+
+// ============================================================
+// Tickets Tab (Owner – client support requests)
+// ============================================================
+
+function TicketsTab() {
+  const { user, addLog } = useApp();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [active, setActive] = useState<Ticket | null>(null);
+
+  const load = () => {
+    setTickets(getTickets().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    if (active) {
+      const updated = getTickets().find((t) => t.id === active.id);
+      if (updated) setActive(updated);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    const int = setInterval(load, 2500);
+    return () => clearInterval(int);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const accept = (t: Ticket) => {
+    updateTicket(t.id, { status: 'accepted' });
+    addNotification({
+      id: 'ntf-' + Date.now(),
+      target: t.clientName,
+      title: 'Request Accepted',
+      body: `The owner opened a live chat for "${t.subject}".`,
+      type: 'message',
+      read: false,
+      createdAt: new Date().toISOString(),
+    });
+    addLog('Ticket Accepted', `${t.id} from ${t.clientName}`);
+    load();
+    setActive({ ...t, status: 'accepted' });
+  };
+
+  const close = (t: Ticket) => {
+    updateTicket(t.id, { status: 'closed' });
+    addLog('Ticket Closed', `${t.id}`);
+    load();
+    setActive(null);
+  };
+
+  if (active) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <button onClick={() => setActive(null)} className="mb-4 inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors">
+          ← Back to tickets
+        </button>
+        <GlassCard hover={false} className="mb-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-xs text-white/40 tracking-wider uppercase">{active.id} · {active.clientName}</div>
+              <h2 className="mt-1 text-lg font-bold">{active.subject}</h2>
+            </div>
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase ${
+              active.status === 'accepted' ? 'border-green-500/20 bg-green-500/10 text-green-400' :
+              active.status === 'closed' ? 'border-white/10 bg-white/5 text-white/40' :
+              'border-amber-500/20 bg-amber-500/10 text-amber-400'
+            }`}>{active.status}</span>
+          </div>
+          <p className="mt-3 text-sm text-white/60">{active.message}</p>
+          <div className="mt-4 flex gap-2">
+            {active.status === 'pending' && (
+              <GoldButton size="sm" onClick={() => accept(active)}>Accept & Open Chat</GoldButton>
+            )}
+            {active.status !== 'closed' && (
+              <button onClick={() => close(active)} className="rounded-lg border border-white/[0.08] px-4 py-2 text-xs text-white/50 hover:text-white hover:border-white/20 transition-colors">
+                Close Ticket
+              </button>
+            )}
+          </div>
+        </GlassCard>
+
+        {active.status === 'accepted' && (
+          <GlassCard hover={false}>
+            <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4 flex items-center gap-2">
+              <MessageCircle className="h-4 w-4 text-[#D4AF37]" /> Live Chat with {active.clientName}
+            </h3>
+            <ChatPanel
+              conversationId={`ticket:${active.id}`}
+              senderName={user?.name || 'Owner'}
+              senderRole="Owner"
+              heightClass="h-[360px]"
+              emptyText={`Chat with ${active.clientName}`}
+            />
+          </GlassCard>
+        )}
+      </div>
+    );
+  }
+
+  const pending = tickets.filter((t) => t.status === 'pending');
+  const others = tickets.filter((t) => t.status !== 'pending');
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold tracking-wider uppercase text-amber-400 mb-3 flex items-center gap-2">
+          <LifeBuoy className="h-4 w-4" /> Pending Requests
+          {pending.length > 0 && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px]">{pending.length}</span>}
+        </h3>
+        {pending.length > 0 ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {pending.map((t) => (
+              <GlassCard key={t.id} onClick={() => setActive(t)}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-xs text-white/40">{t.id} · {t.clientName}</div>
+                    <h4 className="mt-1 font-semibold">{t.subject}</h4>
+                  </div>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-400">New</span>
+                </div>
+                <p className="mt-2 text-sm text-white/50 line-clamp-2">{t.message}</p>
+                <GoldButton size="sm" className="mt-3 w-full" onClick={() => accept(t)}>Accept & Chat</GoldButton>
+              </GlassCard>
+            ))}
+          </div>
+        ) : (
+          <div className="py-8 text-center text-white/20 text-sm rounded-2xl border border-white/[0.04]">No pending requests</div>
+        )}
+      </div>
+
+      {others.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold tracking-wider uppercase text-white/30 mb-3">Other Tickets</h3>
+          <div className="space-y-2">
+            {others.map((t) => (
+              <GlassCard key={t.id} onClick={() => setActive(t)} className="flex items-center justify-between p-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-[#D4AF37]">{t.id}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${t.status === 'accepted' ? 'bg-green-500/10 text-green-400' : 'bg-white/5 text-white/40'}`}>{t.status}</span>
+                  </div>
+                  <div className="mt-0.5 text-sm text-white/50">{t.clientName} · {t.subject}</div>
+                </div>
+                <MessageCircle className="h-4 w-4 text-white/30" />
+              </GlassCard>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

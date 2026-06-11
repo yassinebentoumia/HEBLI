@@ -12,7 +12,12 @@ import type {
   InventoryTransaction,
   AuditLog,
   Category,
+  ChatMessage,
+  Ticket,
+  StaffSession,
+  AppNotification,
 } from '@/types';
+import { schedulePush, SYNC_KEYS } from './sync';
 
 const KEYS = {
   products: 'hebli_products',
@@ -23,17 +28,25 @@ const KEYS = {
   inventoryTransactions: 'hebli_inventory_transactions',
   auditLogs: 'hebli_audit_logs',
   categories: 'hebli_categories',
+  chat: 'hebli_chat_messages',
+  tickets: 'hebli_tickets',
+  sessions: 'hebli_staff_sessions',
+  notifications: 'hebli_notifications',
   backups: 'hebli_backups',
   currentUser: 'hebli_current_user',
 };
 
-// Atomic write with temp key to prevent corruption
+// Atomic write with temp key to prevent corruption + cloud sync
 function atomicWrite<T>(key: string, data: T): void {
   const tmpKey = key + '_tmp';
   try {
     localStorage.setItem(tmpKey, JSON.stringify(data));
     localStorage.setItem(key, JSON.stringify(data));
     localStorage.removeItem(tmpKey);
+    // Push to cloud if this key is synced
+    if (SYNC_KEYS.includes(key)) {
+      schedulePush();
+    }
   } catch (e) {
     console.error('Atomic write failed:', e);
   }
@@ -365,6 +378,143 @@ export function deleteCategory(id: string): void {
 export function getCategoryIcon(name: string): string {
   const cats = getCategories();
   return cats.find((c) => c.name === name)?.icon || '☕';
+}
+
+// ============================================================
+// Chat Messages
+// ============================================================
+export function getChatMessages(): ChatMessage[] {
+  return safeRead<ChatMessage[]>(KEYS.chat, []);
+}
+
+export function addChatMessage(msg: ChatMessage): void {
+  const all = getChatMessages();
+  all.push(msg);
+  // keep last 500 messages
+  const trimmed = all.slice(-500);
+  atomicWrite(KEYS.chat, trimmed);
+}
+
+export function getConversation(conversationId: string): ChatMessage[] {
+  return getChatMessages()
+    .filter((m) => m.conversationId === conversationId)
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+// ============================================================
+// Tickets (client → owner support requests)
+// ============================================================
+export function getTickets(): Ticket[] {
+  return safeRead<Ticket[]>(KEYS.tickets, []);
+}
+
+export function addTicket(ticket: Ticket): void {
+  const all = getTickets();
+  all.push(ticket);
+  atomicWrite(KEYS.tickets, all);
+}
+
+export function updateTicket(id: string, updates: Partial<Ticket>): void {
+  const all = getTickets();
+  const idx = all.findIndex((t) => t.id === id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...updates };
+    atomicWrite(KEYS.tickets, all);
+  }
+}
+
+// ============================================================
+// Staff Sessions (on-duty work timer)
+// ============================================================
+export function getSessions(): StaffSession[] {
+  return safeRead<StaffSession[]>(KEYS.sessions, []);
+}
+
+// Start an ON-DUTY session (clock-in)
+export function startSession(staff: { id: string; name: string; role: string }): string {
+  const sessions = getSessions();
+  const now = new Date();
+  const id = 'sess-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  sessions.push({
+    id,
+    staffId: staff.id,
+    staffName: staff.name,
+    role: staff.role,
+    loginAt: now.toISOString(),
+    dayKey: now.toISOString().split('T')[0],
+    active: true,
+  });
+  atomicWrite(KEYS.sessions, sessions);
+  return id;
+}
+
+// End / clock-out a session
+export function endSession(sessionId: string): void {
+  const sessions = getSessions();
+  const idx = sessions.findIndex((s) => s.id === sessionId);
+  if (idx !== -1 && sessions[idx].active) {
+    const now = new Date();
+    sessions[idx].logoutAt = now.toISOString();
+    sessions[idx].active = false;
+    sessions[idx].durationSeconds = Math.floor(
+      (now.getTime() - new Date(sessions[idx].loginAt).getTime()) / 1000
+    );
+    atomicWrite(KEYS.sessions, sessions);
+  }
+}
+
+export function getActiveSessions(): StaffSession[] {
+  return getSessions().filter((s) => s.active);
+}
+
+// Total worked seconds for a staff member on a given day
+export function getStaffDayDuration(staffId: string, dayKey: string): number {
+  const sessions = getSessions().filter((s) => s.staffId === staffId && s.dayKey === dayKey);
+  return sessions.reduce((sum, s) => {
+    if (s.durationSeconds) return sum + s.durationSeconds;
+    if (s.active) return sum + Math.floor((Date.now() - new Date(s.loginAt).getTime()) / 1000);
+    return sum;
+  }, 0);
+}
+
+// ============================================================
+// Notifications (owner → staff private messages, etc.)
+// ============================================================
+export function getNotifications(): AppNotification[] {
+  return safeRead<AppNotification[]>(KEYS.notifications, []);
+}
+
+export function addNotification(n: AppNotification): void {
+  const all = getNotifications();
+  all.push(n);
+  atomicWrite(KEYS.notifications, all.slice(-200));
+}
+
+export function getNotificationsFor(name: string, role: string): AppNotification[] {
+  return getNotifications()
+    .filter((n) => n.target === 'all' || n.target === name || n.target === role)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export function markNotificationRead(id: string): void {
+  const all = getNotifications();
+  const idx = all.findIndex((n) => n.id === id);
+  if (idx !== -1) {
+    all[idx].read = true;
+    atomicWrite(KEYS.notifications, all);
+  }
+}
+
+export function markAllNotificationsRead(name: string, role: string): void {
+  const all = getNotifications();
+  let changed = false;
+  all.forEach((n) => {
+    if ((n.target === 'all' || n.target === name || n.target === role) && !n.read) {
+      n.read = true;
+      changed = true;
+    }
+  });
+  if (changed) atomicWrite(KEYS.notifications, all);
 }
 
 // Orders

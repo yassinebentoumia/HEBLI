@@ -4,11 +4,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, LogOut, Coffee, DollarSign, Check, Receipt, User, Clock, TrendingUp, Timer, Search } from 'lucide-react';
+import { CreditCard, Coffee, DollarSign, Check, Receipt, User, Clock, TrendingUp, Timer, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
+import StaffTopBar from '@/components/StaffTopBar';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addPayment, addAuditLog, getCashierStats, getPayments } from '@/utils/store';
 import type { Order, Payment } from '@/types';
@@ -16,7 +17,7 @@ import { format } from 'date-fns';
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser, refreshOrders } = useApp();
+  const { user, logoutUser, refreshOrders, syncTick } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [todayPayments, setTodayPayments] = useState<Payment[]>([]);
   const [historyPayments, setHistoryPayments] = useState<Payment[]>([]);
@@ -27,8 +28,8 @@ export default function CashierDashboard() {
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
-    // Cashier sees Ready orders awaiting payment
-    const relevant = all.filter((o) => o.status === 'Ready');
+    // Cashier sees ALL active (unpaid) orders in real time — Pending, In Preparation, Ready
+    const relevant = all.filter((o) => o.status !== 'Paid');
     setOrders(relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
 
     // Load cashier stats
@@ -71,8 +72,14 @@ export default function CashierDashboard() {
   useEffect(() => {
     loadOrders();
     const interval = setInterval(loadOrders, 3000);
-    return () => clearInterval(interval);
+    const refresh = setInterval(() => window.location.reload(), 2 * 60 * 1000);
+    return () => { clearInterval(interval); clearInterval(refresh); };
   }, [loadOrders]);
+
+  // React to cross-device sync updates
+  useEffect(() => {
+    loadOrders();
+  }, [syncTick, loadOrders]);
 
   const markAsPaid = (order: Order) => {
     setProcessingId(order.id);
@@ -108,31 +115,26 @@ export default function CashierDashboard() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10">
-              <CreditCard className="h-5 w-5 text-[#D4AF37]" />
+        <div className="mx-auto flex max-w-5xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 flex-shrink-0">
+              <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-[#D4AF37]" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-[#D4AF37]">HEBLI</span> Caisse
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
+                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Caisse</span>
               </h1>
-              <p className="text-xs text-white/30">{user?.name}</p>
+              <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
           </div>
 
           <div className="flex-1" />
 
-          <button
-            onClick={() => { logoutUser(); navigate('/staff'); }}
-            className="rounded-xl p-2 text-white/30 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <LogOut className="h-5 w-5" />
-          </button>
+          <StaffTopBar onLogout={() => { logoutUser(); navigate('/staff'); }} />
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-8">
         {/* Stats - Daily & Weekly */}
         <div className="mb-8 grid grid-cols-2 gap-4">
           <GlassCard hover={false} className="text-center">
@@ -210,6 +212,11 @@ export default function CashierDashboard() {
                           </span>
                         ))}
                       </div>
+                      {order.note && (
+                        <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-1.5 text-xs text-amber-300 inline-block">
+                          📝 {order.note}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -219,12 +226,17 @@ export default function CashierDashboard() {
                       </div>
                       <GoldButton
                         onClick={() => markAsPaid(order)}
-                        disabled={processingId === order.id}
+                        disabled={processingId === order.id || order.status !== 'Ready'}
                       >
                         {processingId === order.id ? (
                           <>
                             <Coffee className="h-4 w-4 animate-spin" />
                             En cours
+                          </>
+                        ) : order.status !== 'Ready' ? (
+                          <>
+                            <Clock className="h-4 w-4" />
+                            En préparation
                           </>
                         ) : (
                           <>

@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import {
   Coffee, ShoppingBag, ChevronRight, Star, Sparkles, ArrowRight,
-  Shield, Menu as MenuIcon, X,
+  Shield, Menu as MenuIcon, X, MessageCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
@@ -49,6 +49,9 @@ export default function Landing() {
             <button onClick={() => navigate('/client/track')} className="text-sm text-white/50 hover:text-white transition-colors">
               Track Order
             </button>
+            <button onClick={() => navigate('/client/support')} className="text-sm text-white/50 hover:text-white transition-colors">
+              Support
+            </button>
             <button onClick={() => navigate('/staff')} className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-xs text-white/40 hover:text-white hover:border-white/20 transition-colors">
               <Shield className="h-3 w-3" />
               Staff Portal
@@ -76,6 +79,9 @@ export default function Landing() {
             </button>
             <button onClick={() => { navigate('/client/track'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-white/70 hover:text-white py-2">
               🔍 Track Order
+            </button>
+            <button onClick={() => { navigate('/client/support'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-white/70 hover:text-white py-2">
+              💬 Support / Reclamation
             </button>
             <button onClick={() => { navigate('/staff'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-[#D4AF37] hover:text-amber-300 py-2">
               🛡️ Staff Portal
@@ -329,6 +335,20 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* Floating Support / Chat Button */}
+      <motion.button
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ delay: 1, type: 'spring', stiffness: 200 }}
+        whileHover={{ scale: 1.08 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => navigate('/client/support')}
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-[#D4AF37] px-5 py-4 text-black font-bold shadow-2xl shadow-[#D4AF37]/30 hover:bg-amber-400 transition-colors"
+      >
+        <MessageCircle className="h-5 w-5" />
+        <span className="hidden sm:inline text-sm">Need help?</span>
+      </motion.button>
     </div>
   );
 }

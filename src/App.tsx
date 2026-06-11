@@ -13,6 +13,7 @@ import { lazy, Suspense } from 'react';
 const Landing = lazy(() => import('@/pages/client/Landing'));
 const Menu = lazy(() => import('@/pages/client/Menu'));
 const TrackOrder = lazy(() => import('@/pages/client/TrackOrder'));
+const Support = lazy(() => import('@/pages/client/Support'));
 const StaffLogin = lazy(() => import('@/pages/staff/Login'));
 const BaristaDashboard = lazy(() => import('@/pages/staff/BaristaDashboard'));
 const CashierDashboard = lazy(() => import('@/pages/staff/CashierDashboard'));
@@ -51,6 +52,7 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/client/menu" element={<Menu />} />
             <Route path="/client/track" element={<TrackOrder />} />
+            <Route path="/client/support" element={<Support />} />
 
             {/* Staff Portal */}
             <Route path="/staff" element={<StaffLogin />} />

@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle2, Circle, Timer, CreditCard, PackageOpen, User, Coffee, LogOut, Bell } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, Circle, Timer, CreditCard, PackageOpen, User, Coffee, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import { getOrders } from '@/utils/store';
@@ -152,24 +152,27 @@ export default function TrackOrder() {
                     onClick={() => setSelectedOrder(o)}
                     className="w-full text-left"
                   >
-                    <GlassCard className={`flex items-center justify-between p-4 ${o.status === 'Ready' ? 'border-[#D4AF37]/30 bg-[#D4AF37]/5' : ''}`}>
+                    <GlassCard className="flex items-center justify-between p-4">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-bold text-[#D4AF37]">{o.id}</span>
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.1em] uppercase ${statusColor[o.status]}`}>
                             {o.status}
                           </span>
-                          {o.status === 'Ready' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#D4AF37] animate-pulse">
-                              <Bell className="h-3 w-3" />
-                              Go pay
-                            </span>
-                          )}
                         </div>
                         <div className="flex items-center gap-1 mt-1 text-xs text-white/40">
                           <Clock className="h-3 w-3" />
                           {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </div>
+                        {o.status === 'Ready' && (
+                          <motion.div
+                            animate={{ opacity: [0.6, 1, 0.6] }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
+                            className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-semibold text-[#D4AF37]"
+                          >
+                            <CreditCard className="h-2.5 w-2.5" /> Go pay at cashier
+                          </motion.div>
+                        )}
                       </div>
                       <span className="text-sm font-semibold text-white/60">{o.total.toFixed(2)} DT</span>
                     </GlassCard>
@@ -227,30 +230,31 @@ export default function TrackOrder() {
               </div>
             </GlassCard>
 
-            {/* Payment Notification Banner */}
+            {/* Go-Pay Notification Banner */}
             {selectedOrder.status === 'Ready' && (
               <motion.div
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ type: 'spring', stiffness: 200 }}
-                className="mb-8 rounded-3xl border-2 border-[#D4AF37]/50 bg-gradient-to-br from-[#D4AF37]/20 to-amber-600/10 p-6 shadow-2xl shadow-[#D4AF37]/20"
+                initial={{ opacity: 0, y: -10, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className="mb-8 overflow-hidden rounded-2xl border border-[#D4AF37]/40 bg-gradient-to-br from-[#D4AF37]/15 to-amber-600/5 p-5 relative"
               >
-                <div className="flex items-start gap-4">
+                <motion.div
+                  className="absolute inset-0 bg-[#D4AF37]/10"
+                  animate={{ opacity: [0.15, 0.35, 0.15] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                />
+                <div className="relative flex items-center gap-4">
                   <motion.div
-                    animate={{ scale: [1, 1.1, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D4AF37] shadow-lg shadow-[#D4AF37]/40"
+                    animate={{ scale: [1, 1.12, 1] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                    className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-[#D4AF37] text-black"
                   >
-                    <Bell className="h-7 w-7 text-black" />
+                    <CreditCard className="h-6 w-6" />
                   </motion.div>
                   <div className="flex-1">
-                    <h3 className="text-xl font-bold text-[#D4AF37] mb-2">Your order is ready!</h3>
-                    <p className="text-white/70 text-sm mb-3">
-                      Please proceed to the <strong className="text-white">cashier</strong> to pay <strong className="text-[#D4AF37]">{selectedOrder.total.toFixed(2)} DT</strong> and collect your order.
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-white/40">
-                      <div className="flex h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-                      <span>Waiting for payment at cashier</span>
+                    <div className="text-base font-bold text-[#D4AF37]">Your order is ready! 🎉</div>
+                    <div className="mt-0.5 text-sm text-white/70">
+                      Please go to the <span className="font-semibold text-white">cashier</span> to pay{' '}
+                      <span className="font-semibold text-[#D4AF37]">{selectedOrder.total.toFixed(2)} DT</span> and collect your order.
                     </div>
                   </div>
                 </div>

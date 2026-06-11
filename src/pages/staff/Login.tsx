@@ -4,11 +4,12 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, ArrowLeft, Coffee, Shield } from 'lucide-react';
+import { Lock, ArrowLeft, Coffee, Shield, Cloud, CloudOff, Copy, Check, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
 import { useApp } from '@/contexts/AppContext';
+import { createCafe, joinCafe, getCafeCode } from '@/utils/sync';
 
 export default function StaffLogin() {
   const navigate = useNavigate();
@@ -16,6 +17,37 @@ export default function StaffLogin() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Sync state
+  const [cafeCode, setCafeCode] = useState(getCafeCode() || '');
+  const [joinInput, setJoinInput] = useState('');
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  const [copied, setCopied] = useState(false);
+  const synced = !!cafeCode;
+
+  const handleCreateCafe = async () => {
+    setSyncLoading(true); setSyncError('');
+    const c = await createCafe();
+    setSyncLoading(false);
+    if (c) { setCafeCode(c); localStorage.setItem('hebli_shared_cafe_published', c); }
+    else setSyncError('No internet connection.');
+  };
+
+  const handleJoinCafe = async () => {
+    if (!joinInput.trim()) return;
+    setSyncLoading(true); setSyncError('');
+    const ok = await joinCafe(joinInput.trim());
+    setSyncLoading(false);
+    if (ok) { setCafeCode(joinInput.trim()); localStorage.setItem('hebli_shared_cafe_published', joinInput.trim()); setTimeout(() => window.location.reload(), 400); }
+    else setSyncError('Invalid code or no connection.');
+  };
+
+  const copyCode = () => {
+    navigator.clipboard?.writeText(cafeCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   const handleLogin = () => {
     setError('');
@@ -69,11 +101,57 @@ export default function StaffLogin() {
         {/* Back button */}
         <button
           onClick={() => navigate('/')}
-          className="mb-8 inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
+          className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Home
         </button>
+
+        {/* MULTI-DEVICE SYNC BANNER */}
+        <div className={`mb-6 rounded-2xl border p-4 ${synced ? 'border-green-500/20 bg-green-500/[0.04]' : 'border-amber-500/30 bg-amber-500/[0.06]'}`}>
+          {synced ? (
+            <div>
+              <div className="flex items-center gap-2 text-green-400 text-sm font-semibold mb-2">
+                <Cloud className="h-4 w-4" /> Devices Connected & Syncing
+              </div>
+              <div className="text-xs text-white/40 mb-2">Open this site on your other devices and paste this code to sync orders live:</div>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded-lg bg-black/40 px-3 py-2 text-xs font-mono text-[#D4AF37] break-all">{cafeCode}</code>
+                <button onClick={copyCode} className="rounded-lg bg-white/[0.05] p-2 text-white/60 hover:text-white">
+                  {copied ? <Check className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold mb-1">
+                <CloudOff className="h-4 w-4" /> Connect Your Devices
+              </div>
+              <p className="text-xs text-white/50 mb-3">To make orders appear on every device (phone + PC), connect them to one café.</p>
+              <button
+                onClick={handleCreateCafe}
+                disabled={syncLoading}
+                className="w-full rounded-lg bg-[#D4AF37] py-2.5 text-xs font-bold text-black hover:bg-amber-400 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 mb-2"
+              >
+                {syncLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
+                Create Café (1st device)
+              </button>
+              <div className="flex gap-2">
+                <input
+                  value={joinInput}
+                  onChange={(e) => setJoinInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinCafe()}
+                  placeholder="Or paste café code..."
+                  className="flex-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-white placeholder:text-white/20 outline-none"
+                />
+                <button onClick={handleJoinCafe} disabled={syncLoading || !joinInput.trim()} className="rounded-lg border border-white/10 px-3 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40">
+                  Join
+                </button>
+              </div>
+              {syncError && <p className="mt-2 text-xs text-red-400">{syncError}</p>}
+            </div>
+          )}
+        </div>
 
         <GlassCard className="text-center">
           <motion.div

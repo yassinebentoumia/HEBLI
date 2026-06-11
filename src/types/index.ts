@@ -56,9 +56,50 @@ export interface Order {
   items: CartItem[];
   total: number;
   status: OrderStatus;
+  note?: string;
   prepTimeSeconds?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  conversationId: string; // 'group', or `dm:ownerId:staffId`, or `ticket:ticketId`
+  senderName: string;
+  senderRole: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface Ticket {
+  id: string;
+  clientName: string;
+  subject: string;
+  message: string;
+  status: 'pending' | 'accepted' | 'closed';
+  createdAt: string;
+}
+
+export interface StaffSession {
+  id: string;
+  staffId: string;
+  staffName: string;
+  role: string;
+  loginAt: string;
+  logoutAt?: string;
+  durationSeconds?: number;
+  dayKey: string; // YYYY-MM-DD
+  active: boolean; // on-duty toggle
+}
+
+export interface AppNotification {
+  id: string;
+  target: string; // staff name, role, or 'all'
+  title: string;
+  body: string;
+  type: 'order' | 'message' | 'info';
+  read: boolean;
+  createdAt: string;
 }
 
 export interface Payment {

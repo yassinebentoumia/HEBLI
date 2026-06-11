@@ -1,8 +1,8 @@
 // ============================================================
-// HEBLI – Global App Context
+// HEBLI – Global App Context (Auto Cross-Device Cloud Sync)
 // ============================================================
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { Staff, Order } from '@/types';
 import {
   initializeData,
@@ -13,10 +13,13 @@ import {
   createBackup,
   addAuditLog,
 } from '@/utils/store';
+import { pullRemote, pushRemote, isSynced, getCafeCode, joinCafe } from '@/utils/sync';
 
 interface AppContextType {
   user: Staff | null;
   orders: Order[];
+  syncTick: number;
+  syncStatus: 'connecting' | 'online' | 'offline';
   login: (pin: string) => Staff | null;
   logoutUser: () => void;
   refreshOrders: () => void;
@@ -26,6 +29,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType>({
   user: null,
   orders: [],
+  syncTick: 0,
+  syncStatus: 'connecting',
   login: () => null,
   logoutUser: () => {},
   refreshOrders: () => {},
@@ -35,25 +40,77 @@ const AppContext = createContext<AppContextType>({
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Staff | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [syncTick, setSyncTick] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
+  const initialized = useRef(false);
 
+  // Bootstrap auto-sync
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+
     initializeData();
     setUser(getCurrentUser());
     setOrders(getOrders());
-
-    // Auto backup every 6 hours
-    const backupInterval = setInterval(createBackup, 6 * 60 * 60 * 1000);
-    // Also backup on first load
     createBackup();
 
-    // Poll orders every 5 seconds for "realtime"
-    const poll = setInterval(() => {
-      setOrders(getOrders());
-    }, 5000);
+    (async () => {
+      // 1. Check if URL hash contains ?cafe=CODE — auto-join that café.
+      try {
+        const hash = window.location.hash || '';
+        const queryStart = hash.indexOf('?');
+        if (queryStart !== -1) {
+          const params = new URLSearchParams(hash.substring(queryStart + 1));
+          const urlCafe = params.get('cafe');
+          if (urlCafe && urlCafe !== getCafeCode()) {
+            const ok = await joinCafe(urlCafe);
+            if (ok) {
+              localStorage.setItem('hebli_shared_cafe_published', urlCafe);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+
+      // 2. Use the device's existing café code if present.
+      const code = getCafeCode();
+      if (code) {
+        const ok = await pullRemote();
+        setSyncStatus('online');
+        if (ok) {
+          setOrders(getOrders());
+          setSyncTick((t) => t + 1);
+        }
+      } else {
+        // No café connected yet — owner must create one and share the code.
+        setSyncStatus('offline');
+      }
+    })();
+
+    // Sync poll every 2 seconds
+    const syncPoll = setInterval(async () => {
+      if (isSynced()) {
+        try {
+          const changed = await pullRemote();
+          setSyncStatus('online');
+          if (changed) {
+            setOrders(getOrders());
+            setSyncTick((t) => t + 1);
+          } else {
+            setOrders(getOrders());
+          }
+        } catch {
+          setSyncStatus('offline');
+        }
+      } else {
+        setOrders(getOrders());
+      }
+    }, 2000);
+
+    const backupInterval = setInterval(createBackup, 6 * 60 * 60 * 1000);
 
     return () => {
+      clearInterval(syncPoll);
       clearInterval(backupInterval);
-      clearInterval(poll);
     };
   }, []);
 
@@ -68,6 +125,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         user: staff.name,
         timestamp: new Date().toISOString(),
       });
+      pushRemote();
     }
     return staff;
   }, []);
@@ -84,6 +142,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
     logout();
     setUser(null);
+    pushRemote();
   }, [user]);
 
   const refreshOrders = useCallback(() => {
@@ -101,7 +160,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <AppContext.Provider value={{ user, orders, login, logoutUser, refreshOrders, addLog }}>
+    <AppContext.Provider value={{ user, orders, syncTick, syncStatus, login, logoutUser, refreshOrders, addLog }}>
       {children}
     </AppContext.Provider>
   );

@@ -2,25 +2,57 @@
 // HEBLI – Barista Dashboard (Production Center)
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Coffee,
   Timer,
   CheckCircle2,
   Bell,
-  LogOut,
   Clock,
   User,
+  Volume2,
+  VolumeX,
   DollarSign,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
+import StaffTopBar from '@/components/StaffTopBar';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
 import type { Order } from '@/types';
+
+// Notification beep using Web Audio
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.5);
+    // second tone
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.type = 'sine';
+    osc2.frequency.value = 1175;
+    gain2.gain.setValueAtTime(0.0001, ctx.currentTime + 0.25);
+    gain2.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.27);
+    gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.75);
+    osc2.start(ctx.currentTime + 0.25);
+    osc2.stop(ctx.currentTime + 0.75);
+  } catch { /* ignore */ }
+}
 
 function LiveTimer({ startTime }: { startTime: string }) {
   const [elapsed, setElapsed] = useState(0);
@@ -42,10 +74,12 @@ function LiveTimer({ startTime }: { startTime: string }) {
 
 export default function BaristaDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser, refreshOrders } = useApp();
+  const { user, logoutUser, refreshOrders, syncTick } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
-  const [prevOrderCount, setPrevOrderCount] = useState(0);
+  const [soundOn, setSoundOn] = useState(true);
+  const prevPendingRef = useRef(0);
+  const initializedRef = useRef(false);
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
@@ -56,18 +90,28 @@ export default function BaristaDashboard() {
     setOrders(relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
 
     const pendingCount = relevant.filter((o) => o.status === 'Pending').length;
-    if (pendingCount > prevOrderCount && prevOrderCount > 0) {
+    if (initializedRef.current && pendingCount > prevPendingRef.current) {
       setNotification(`🔔 Nouvelle commande! (${pendingCount} en attente)`);
-      setTimeout(() => setNotification(null), 4000);
+      if (soundOn) playBeep();
+      setTimeout(() => setNotification(null), 4500);
     }
-    setPrevOrderCount(pendingCount);
-  }, [prevOrderCount]);
+    prevPendingRef.current = pendingCount;
+    initializedRef.current = true;
+  }, [soundOn]);
 
   useEffect(() => {
     loadOrders();
+    // local poll every 3s
     const interval = setInterval(loadOrders, 3000);
-    return () => clearInterval(interval);
+    // hard auto-refresh every 2 minutes
+    const refresh = setInterval(() => window.location.reload(), 2 * 60 * 1000);
+    return () => { clearInterval(interval); clearInterval(refresh); };
   }, [loadOrders]);
+
+  // React to cross-device sync updates immediately
+  useEffect(() => {
+    loadOrders();
+  }, [syncTick, loadOrders]);
 
   const startPreparation = (orderId: string) => {
     updateOrderStatus(orderId, 'In Preparation');
@@ -109,36 +153,35 @@ export default function BaristaDashboard() {
     <div className="min-h-screen bg-[#0A0A0A] text-white">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10">
-              <Coffee className="h-5 w-5 text-[#D4AF37]" />
+        <div className="mx-auto flex max-w-7xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 flex-shrink-0">
+              <Coffee className="h-4 w-4 sm:h-5 sm:w-5 text-[#D4AF37]" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-[#D4AF37]">HEBLI</span> Barista
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
+                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Barista</span>
               </h1>
-              <p className="text-xs text-white/30">{user?.name}</p>
+              <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
           </div>
 
           <div className="flex-1" />
 
-          {pendingOrders.length > 0 && (
-            <div className="relative">
-              <Bell className="h-5 w-5 text-amber-400" />
-              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold">
-                {pendingOrders.length}
-              </span>
-            </div>
-          )}
-
           <button
-            onClick={() => { logoutUser(); navigate('/staff'); }}
-            className="rounded-xl p-2 text-white/30 hover:text-white hover:bg-white/5 transition-colors"
+            onClick={() => setSoundOn((s) => !s)}
+            className={`flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${
+              soundOn
+                ? 'border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#D4AF37]'
+                : 'border-white/[0.08] bg-white/[0.02] text-white/40 hover:text-white'
+            }`}
+            title={soundOn ? 'Order alert sound ON — tap to mute' : 'Sound is OFF — tap to enable'}
           >
-            <LogOut className="h-5 w-5" />
+            {soundOn ? <Volume2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+            <span className="hidden sm:inline">{soundOn ? 'Sound' : 'Muted'}</span>
           </button>
+
+          <StaffTopBar onLogout={() => { logoutUser(); navigate('/staff'); }} />
         </div>
       </header>
 
@@ -159,7 +202,7 @@ export default function BaristaDashboard() {
         )}
       </AnimatePresence>
 
-      <main className="mx-auto max-w-7xl px-4 py-8">
+      <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-8">
         {/* Stats */}
         <div className="mb-8 grid grid-cols-3 gap-4">
           <GlassCard hover={false} className="text-center">
@@ -212,6 +255,11 @@ export default function BaristaDashboard() {
                               </div>
                             ))}
                           </div>
+                          {order.note && (
+                            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-1.5 text-xs text-amber-300">
+                              📝 {order.note}
+                            </div>
+                          )}
                           <div className="mt-2 flex items-center justify-between">
                             <div className="text-xs text-amber-400/80 flex items-center gap-1 font-mono">
                               <Clock className="h-3 w-3" /> <LiveTimer startTime={order.createdAt} />
@@ -272,6 +320,11 @@ export default function BaristaDashboard() {
                               </div>
                             ))}
                           </div>
+                          {order.note && (
+                            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-1.5 text-xs text-amber-300">
+                              📝 {order.note}
+                            </div>
+                          )}
                           <div className="mt-2 flex items-center justify-between">
                             <div className="text-xs text-blue-400/80 flex items-center gap-1 font-mono">
                               <Timer className="h-3 w-3" /> <LiveTimer startTime={order.createdAt} />
