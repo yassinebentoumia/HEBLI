@@ -111,9 +111,9 @@ export default function BaristaDashboard() {
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
-    // Barista sees Pending, In Preparation, AND Ready (unpaid)
+    // Barista sees Pending, In Preparation, Ready (unpaid), AND Paid (completed today)
     const relevant = all.filter(
-      (o) => o.status === 'Pending' || o.status === 'In Preparation' || o.status === 'Ready'
+      (o) => o.status === 'Pending' || o.status === 'In Preparation' || o.status === 'Ready' || o.status === 'Paid'
     );
     // Sort: oldest order first (longest waiting time at the top — most urgent)
     setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
@@ -176,6 +176,11 @@ export default function BaristaDashboard() {
   const pendingOrders = orders.filter((o) => o.status === 'Pending' && matchesSearch(o));
   const preparingOrders = orders.filter((o) => o.status === 'In Preparation' && matchesSearch(o));
   const readyOrders = orders.filter((o) => o.status === 'Ready' && matchesSearch(o));
+  // Paid orders: show today's only (sorted newest first since they're completed)
+  const today = new Date().toISOString().split('T')[0];
+  const paidOrders = orders
+    .filter((o) => o.status === 'Paid' && matchesSearch(o) && new Date(o.createdAt).toISOString().split('T')[0] === today)
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
@@ -238,18 +243,22 @@ export default function BaristaDashboard() {
 
       <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-8">
         {/* Stats */}
-        <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <GlassCard hover={false} className="text-center">
-            <div className="text-3xl font-bold text-amber-400">{pendingOrders.length}</div>
-            <div className="mt-1 text-xs text-white/40 tracking-wider uppercase">En attente</div>
+            <div className="text-2xl sm:text-3xl font-bold text-amber-400">{pendingOrders.length}</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/40 tracking-wider uppercase">En attente</div>
           </GlassCard>
           <GlassCard hover={false} className="text-center">
-            <div className="text-3xl font-bold text-blue-400">{preparingOrders.length}</div>
-            <div className="mt-1 text-xs text-white/40 tracking-wider uppercase">En préparation</div>
+            <div className="text-2xl sm:text-3xl font-bold text-blue-400">{preparingOrders.length}</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/40 tracking-wider uppercase">En préparation</div>
           </GlassCard>
           <GlassCard hover={false} className="text-center">
-            <div className="text-3xl font-bold text-emerald-400">{readyOrders.length}</div>
-            <div className="mt-1 text-xs text-white/40 tracking-wider uppercase">Prêtes</div>
+            <div className="text-2xl sm:text-3xl font-bold text-emerald-400">{readyOrders.length}</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/40 tracking-wider uppercase">Prêtes</div>
+          </GlassCard>
+          <GlassCard hover={false} className="text-center">
+            <div className="text-2xl sm:text-3xl font-bold text-green-400">{paidOrders.length}</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/40 tracking-wider uppercase">Payées</div>
           </GlassCard>
         </div>
 
@@ -273,7 +282,7 @@ export default function BaristaDashboard() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
+        <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
           {/* Pending */}
           <div>
             <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-amber-400">
@@ -466,6 +475,69 @@ export default function BaristaDashboard() {
                 <div className="py-12 text-center text-white/20">
                   <CheckCircle2 className="mx-auto h-8 w-8 opacity-30" />
                   <p className="mt-2 text-sm">Aucune commande prête</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Paid (today, completed) */}
+          <div>
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-green-400">
+              <DollarSign className="h-4 w-4" />
+              Payées (aujourd'hui)
+              <span className="ml-auto text-[10px] text-white/25">{paidOrders.length}</span>
+            </h2>
+            <div className="space-y-3">
+              <AnimatePresence>
+                {paidOrders.map((order) => (
+                  <motion.div
+                    key={order.id}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    layout
+                  >
+                    <GlassCard className="border-green-500/15 bg-green-500/[0.02]">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-lg font-bold text-green-400">{order.id}</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-green-400">
+                              <CheckCircle2 className="h-2.5 w-2.5" /> Payé
+                            </span>
+                          </div>
+                          <div className="mt-2 flex items-center gap-2 text-sm text-white/50">
+                            <User className="h-3.5 w-3.5" />
+                            {order.clientName}
+                          </div>
+                          <div className="mt-2 space-y-0.5">
+                            {order.items.map((item, i) => (
+                              <div key={i} className="text-sm text-white/60">
+                                {item.quantity}x {item.name}
+                              </div>
+                            ))}
+                          </div>
+                          {order.note && (
+                            <div className="mt-2 rounded-lg border border-amber-500/15 bg-amber-500/[0.04] px-2.5 py-1.5 text-xs text-amber-300/80">
+                              📝 {order.note}
+                            </div>
+                          )}
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className="text-xs text-white/30">
+                              {new Date(order.updatedAt || order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="text-sm font-bold text-green-400">{order.total.toFixed(2)} DT</div>
+                          </div>
+                        </div>
+                      </div>
+                    </GlassCard>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+              {paidOrders.length === 0 && (
+                <div className="py-12 text-center text-white/20">
+                  <DollarSign className="mx-auto h-8 w-8 opacity-30" />
+                  <p className="mt-2 text-sm">Aucune commande payée aujourd'hui</p>
                 </div>
               )}
             </div>

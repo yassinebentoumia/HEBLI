@@ -318,21 +318,47 @@ export default function Landing() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06] px-4 py-12">
+      <footer className="relative border-t border-white/[0.06] px-4 py-12 overflow-hidden">
+        {/* Subtle background glow */}
+        <div className="absolute inset-0 -z-10 pointer-events-none">
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-gradient-to-t from-[#D4AF37]/8 to-transparent rounded-full blur-3xl" />
+        </div>
+
         <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+          {/* Brand + signature centered together */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-center gap-6 text-center"
+          >
             <div>
-              <h3 className="text-2xl font-bold tracking-tight text-[#D4AF37]">HEBLI</h3>
+              <h3 className="text-3xl font-bold tracking-tight text-[#D4AF37]">HEBLI</h3>
               <p className="mt-1 text-sm text-white/30">Premium Coffee Experience &copy; 2026</p>
             </div>
-            <div className="flex items-center gap-6">
-              <button onClick={() => navigate('/client/menu')} className="text-sm text-white/30 hover:text-white/60 transition-colors">Menu</button>
-              <button onClick={() => navigate('/client/track')} className="text-sm text-white/30 hover:text-white/60 transition-colors">Track Order</button>
-              <button onClick={() => navigate('/staff')} className="text-sm text-white/30 hover:text-[#D4AF37] transition-colors flex items-center gap-1">
-                <Shield className="h-3 w-3" /> Staff
-              </button>
+
+            <div className="flex items-center gap-3">
+              <div className="h-px w-12 bg-gradient-to-r from-transparent to-[#D4AF37]/40" />
+              <Sparkles className="h-3.5 w-3.5 text-[#D4AF37] animate-pulse" />
+              <div className="h-px w-12 bg-gradient-to-l from-transparent to-[#D4AF37]/40" />
             </div>
-          </div>
+
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-[11px] tracking-[0.35em] text-white/30 uppercase">
+                Created <span className="text-[#D4AF37]"></span> by
+              </p>
+              <motion.span
+                whileHover={{ scale: 1.05 }}
+                className="group relative text-lg sm:text-xl font-bold tracking-wide bg-gradient-to-r from-[#D4AF37] via-amber-200 to-[#D4AF37] bg-clip-text text-transparent bg-[length:200%_auto] transition-all duration-500 cursor-default"
+                style={{ backgroundPosition: '0% 50%' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '100% 50%'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '0% 50%'; }}
+              >
+                Yassine Bentoumia
+              </motion.span>
+            </div>
+          </motion.div>
         </div>
       </footer>
 
