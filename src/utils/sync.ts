@@ -27,7 +27,56 @@ const ARRAY_KEYS = [
   'hebli_notifications',
 ];
 
-export const SYNC_KEYS = ARRAY_KEYS;
+// Tombstone log — records ids that were deleted, so merging won't resurrect them.
+const TOMBSTONE_KEY = 'hebli_tombstones';
+
+export const SYNC_KEYS = [...ARRAY_KEYS, TOMBSTONE_KEY];
+
+interface Tombstone { key: string; id: string; deletedAt: number; }
+
+function getTombstones(): Tombstone[] {
+  try {
+    const raw = localStorage.getItem(TOMBSTONE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Public: record that `id` was deleted from `key`.
+export function recordDeletion(key: string, id: string): void {
+  const ts = getTombstones();
+  // Replace if exists, else add
+  const idx = ts.findIndex((t) => t.key === key && t.id === id);
+  const entry: Tombstone = { key, id, deletedAt: Date.now() };
+  if (idx === -1) ts.push(entry);
+  else ts[idx] = entry;
+  // Trim: drop tombstones older than 30 days
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const kept = ts.filter((t) => t.deletedAt >= cutoff);
+  localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(kept));
+}
+
+function tombstoneIdsFor(key: string, all: Tombstone[]): Map<string, number> {
+  const m = new Map<string, number>();
+  all.forEach((t) => { if (t.key === key) m.set(t.id, t.deletedAt); });
+  return m;
+}
+
+function mergeTombstones(local: Tombstone[], remote: Tombstone[]): Tombstone[] {
+  const map = new Map<string, Tombstone>();
+  const upsert = (t: Tombstone) => {
+    const k = `${t.key}|${t.id}`;
+    const ex = map.get(k);
+    if (!ex || t.deletedAt > ex.deletedAt) map.set(k, t);
+  };
+  local.forEach(upsert);
+  remote.forEach(upsert);
+  const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  return Array.from(map.values()).filter((t) => t.deletedAt >= cutoff);
+}
 
 function api(path: string): string {
   return path; // same-origin
@@ -49,24 +98,34 @@ function buildSnapshot(): Record<string, any> {
   ARRAY_KEYS.forEach((k) => {
     snap[k] = readLocalArray(k);
   });
+  snap[TOMBSTONE_KEY] = getTombstones();
   return snap;
 }
 
 // Merge two arrays of objects by `id`, keeping the most recent version.
-function mergeArrays(local: any[], remote: any[]): { merged: any[]; changed: boolean } {
+// Items whose id is in `deletedIds` (tombstones) are skipped (or removed if their
+// last-update timestamp is older than the deletion timestamp).
+function mergeArrays(
+  local: any[],
+  remote: any[],
+  deletedIds: Map<string, number>
+): { merged: any[]; changed: boolean } {
   const map = new Map<string, any>();
   const upsert = (item: any) => {
     if (!item || typeof item !== 'object') return;
     const id = item.id;
     if (id === undefined || id === null) return;
+    // Skip if this id was deleted AFTER the item's last update.
+    const delAt = deletedIds.get(String(id));
+    const itemTime = new Date(item.updatedAt || item.timestamp || item.createdAt || 0).getTime();
+    if (delAt !== undefined && delAt >= itemTime) return; // tombstoned
     const existing = map.get(id);
     if (!existing) {
       map.set(id, item);
       return;
     }
     const tA = new Date(existing.updatedAt || existing.timestamp || existing.createdAt || 0).getTime();
-    const tB = new Date(item.updatedAt || item.timestamp || item.createdAt || 0).getTime();
-    if (tB >= tA) map.set(id, item);
+    if (itemTime >= tA) map.set(id, item);
   };
   local.forEach(upsert);
   remote.forEach(upsert);
@@ -83,10 +142,22 @@ function mergeArrays(local: any[], remote: any[]): { merged: any[]; changed: boo
 function applyRemote(remote: Record<string, any>): boolean {
   if (!remote || typeof remote !== 'object') return false;
   let anyChanged = false;
+
+  // 1) Merge tombstones first
+  const localTomb = getTombstones();
+  const remoteTomb: Tombstone[] = Array.isArray(remote[TOMBSTONE_KEY]) ? remote[TOMBSTONE_KEY] : [];
+  const mergedTomb = mergeTombstones(localTomb, remoteTomb);
+  if (JSON.stringify(mergedTomb) !== JSON.stringify(localTomb)) {
+    localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(mergedTomb));
+    anyChanged = true;
+  }
+
+  // 2) Merge each array using tombstones
   ARRAY_KEYS.forEach((k) => {
     if (Array.isArray(remote[k])) {
       const local = readLocalArray(k);
-      const { merged, changed } = mergeArrays(local, remote[k]);
+      const deletedIds = tombstoneIdsFor(k, mergedTomb);
+      const { merged, changed } = mergeArrays(local, remote[k], deletedIds);
       if (changed) {
         localStorage.setItem(k, JSON.stringify(merged));
         anyChanged = true;

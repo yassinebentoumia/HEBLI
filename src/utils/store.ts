@@ -17,7 +17,7 @@ import type {
   StaffSession,
   AppNotification,
 } from '@/types';
-import { schedulePush, SYNC_KEYS } from './sync';
+import { schedulePush, SYNC_KEYS, recordDeletion } from './sync';
 
 const KEYS = {
   products: 'hebli_products',
@@ -342,6 +342,7 @@ export function updateProduct(id: string, updates: Partial<Product>): void {
 }
 
 export function deleteProduct(id: string): void {
+  recordDeletion(KEYS.products, id);
   const products = getProducts().filter((p) => p.id !== id);
   saveProducts(products);
 }
@@ -371,6 +372,7 @@ export function updateCategory(id: string, updates: Partial<Category>): void {
 }
 
 export function deleteCategory(id: string): void {
+  recordDeletion(KEYS.categories, id);
   const cats = getCategories().filter((c) => c.id !== id);
   saveCategories(cats);
 }
@@ -570,6 +572,7 @@ export function updateStaffMember(id: string, updates: Partial<Staff>): void {
 }
 
 export function deleteStaffMember(id: string): void {
+  recordDeletion(KEYS.staff, id);
   const staff = getStaff().filter((s) => s.id !== id);
   saveStaff(staff);
 }

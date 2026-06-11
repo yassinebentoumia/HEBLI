@@ -30,7 +30,8 @@ export default function CashierDashboard() {
     const all = getOrders();
     // Cashier sees ALL active (unpaid) orders in real time — Pending, In Preparation, Ready
     const relevant = all.filter((o) => o.status !== 'Paid');
-    setOrders(relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    // Sort: oldest order first (longest waiting time at the top — most urgent)
+    setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
 
     // Load cashier stats
     if (user) {
@@ -72,8 +73,7 @@ export default function CashierDashboard() {
   useEffect(() => {
     loadOrders();
     const interval = setInterval(loadOrders, 3000);
-    const refresh = setInterval(() => window.location.reload(), 2 * 60 * 1000);
-    return () => { clearInterval(interval); clearInterval(refresh); };
+    return () => { clearInterval(interval); };
   }, [loadOrders]);
 
   // React to cross-device sync updates

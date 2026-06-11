@@ -87,7 +87,8 @@ export default function BaristaDashboard() {
     const relevant = all.filter(
       (o) => o.status === 'Pending' || o.status === 'In Preparation' || o.status === 'Ready'
     );
-    setOrders(relevant.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    // Sort: oldest order first (longest waiting time at the top — most urgent)
+    setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
 
     const pendingCount = relevant.filter((o) => o.status === 'Pending').length;
     if (initializedRef.current && pendingCount > prevPendingRef.current) {
@@ -104,8 +105,7 @@ export default function BaristaDashboard() {
     // local poll every 3s
     const interval = setInterval(loadOrders, 3000);
     // hard auto-refresh every 2 minutes
-    const refresh = setInterval(() => window.location.reload(), 2 * 60 * 1000);
-    return () => { clearInterval(interval); clearInterval(refresh); };
+    return () => { clearInterval(interval); };
   }, [loadOrders]);
 
   // React to cross-device sync updates immediately

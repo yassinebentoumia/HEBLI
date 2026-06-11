@@ -48,22 +48,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (initialized.current) return;
     initialized.current = true;
 
-    initializeData();
-    setUser(getCurrentUser());
-    setOrders(getOrders());
-    createBackup();
-
-    // Initial pull from server
     (async () => {
-      const changed = await pullRemote();
+      // 1) Pull remote FIRST so the server's data wins on a fresh device
+      //    (prevents seeded defaults from "resurrecting" deleted items).
+      const pulled = await pullRemote();
       setSyncStatus(isOnline() ? 'online' : 'offline');
-      if (changed) {
-        setOrders(getOrders());
-        setSyncTick((t) => t + 1);
-        // Refresh current user too (in case staff list was updated remotely)
-        setUser(getCurrentUser());
-      }
-      // Push local data up so the server has anything we created offline.
+
+      // 2) Only seed defaults if neither remote nor local has any data yet.
+      initializeData();
+
+      setUser(getCurrentUser());
+      setOrders(getOrders());
+      createBackup();
+      if (pulled) setSyncTick((t) => t + 1);
+
+      // 3) Push our (possibly default-seeded) data — server will merge
+      //    and tombstones will still suppress any deleted items.
       await pushRemote();
     })();
 
