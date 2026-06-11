@@ -30,6 +30,7 @@ import {
   Clock,
   CircleDot,
   Bell,
+  Receipt,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -76,6 +77,9 @@ import {
   getSessions,
   getStaffDayDuration,
   addNotification,
+  getPayments,
+  deleteOrder,
+  deletePayment,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import ChatPanel from '@/components/ChatPanel';
@@ -87,15 +91,18 @@ import type {
   AuditLog,
   Category,
   Ticket,
+  Order,
+  Payment,
   StaffRole,
 } from '@/types';
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+  { key: 'orders', label: 'Orders', icon: Receipt },
   { key: 'products', label: 'Products', icon: Package },
   { key: 'categories', label: 'Categories', icon: Package },
   { key: 'staff', label: 'Staff', icon: Users },
@@ -125,6 +132,7 @@ export default function OwnerDashboard() {
       case 'categories': return <CategoriesTab />;
       case 'staff': return <StaffTab />;
       case 'inventory': return <InventoryTab />;
+      case 'orders': return <OrdersTab />;
       case 'analytics': return <AnalyticsTab />;
       case 'chat': return <TeamChatTab />;
       case 'tickets': return <TicketsTab />;
@@ -1752,6 +1760,248 @@ function TicketsTab() {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Orders Tab (Owner — view & delete all orders + payments)
+// ============================================================
+
+function OrdersTab() {
+  const { addLog } = useApp();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<'all' | 'today' | 'paid' | 'pending'>('all');
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'order' | 'payment' | 'today' | 'history'; id?: string } | null>(null);
+
+  const load = () => {
+    setOrders(getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+    setPayments(getPayments().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  };
+
+  useEffect(() => {
+    load();
+    const int = setInterval(load, 3000);
+    return () => clearInterval(int);
+  }, []);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const filtered = orders.filter((o) => {
+    if (filter === 'today' && new Date(o.createdAt).toISOString().split('T')[0] !== today) return false;
+    if (filter === 'paid' && o.status !== 'Paid') return false;
+    if (filter === 'pending' && o.status === 'Paid') return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.clientName.toLowerCase().includes(q) ||
+      o.items.some((i) => i.name.toLowerCase().includes(q))
+    );
+  });
+
+  const handleDeleteOrder = (id: string) => {
+    deleteOrder(id);
+    addLog('Order Deleted', `Order ${id} was deleted by owner`);
+    load();
+    setConfirmDelete(null);
+  };
+
+  const handleDeleteToday = () => {
+    const todayPayments = payments.filter((p) => p.date === today);
+    todayPayments.forEach((p) => deletePayment(p.id));
+    addLog('Today Payments Cleared', `${todayPayments.length} payments from today deleted`);
+    load();
+    setConfirmDelete(null);
+  };
+
+  const handleDeleteHistory = () => {
+    payments.forEach((p) => deletePayment(p.id));
+    orders.forEach((o) => deleteOrder(o.id));
+    addLog('All History Cleared', `All orders & payments deleted`);
+    load();
+    setConfirmDelete(null);
+  };
+
+  const totalToday = payments.filter((p) => p.date === today).reduce((s, p) => s + p.amount, 0);
+  const totalAll = payments.reduce((s, p) => s + p.amount, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Today's revenue</div>
+          <div className="mt-1 text-2xl font-bold text-green-400">{totalToday.toFixed(2)} DT</div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Total revenue (all-time)</div>
+          <div className="mt-1 text-2xl font-bold text-[#D4AF37]">{totalAll.toFixed(2)} DT</div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Orders</div>
+          <div className="mt-1 text-2xl font-bold">{orders.length}</div>
+        </GlassCard>
+      </div>
+
+      {/* Danger zone */}
+      <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.04] p-4">
+        <h3 className="text-sm font-bold text-red-400 uppercase tracking-wider flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4" /> Danger Zone — Owner Only
+        </h3>
+        <p className="mt-1 text-xs text-white/40">Clear past sales records. These actions cannot be undone.</p>
+        <div className="mt-3 flex flex-col sm:flex-row gap-2">
+          <button
+            onClick={() => setConfirmDelete({ type: 'today' })}
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-400 hover:bg-amber-500/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" /> Delete today's orders ({payments.filter((p) => p.date === today).length})
+          </button>
+          <button
+            onClick={() => setConfirmDelete({ type: 'history' })}
+            className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-400 hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <Trash2 className="h-4 w-4" /> Delete ALL history ({orders.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by order ID, customer, product..."
+            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-2.5 pl-11 pr-4 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#D4AF37]/50"
+          />
+        </div>
+        <div className="flex gap-1.5">
+          {(['all', 'today', 'paid', 'pending'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-xl px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                filter === f
+                  ? 'bg-[#D4AF37] text-black'
+                  : 'border border-white/[0.08] text-white/50 hover:bg-white/5'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Orders List */}
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <div className="py-16 text-center text-white/25">
+            <Receipt className="h-10 w-10 mx-auto opacity-30 mb-2" />
+            <p className="text-sm">No orders match these filters.</p>
+          </div>
+        ) : (
+          filtered.map((o) => {
+            const payment = payments.find((p) => p.orderId === o.id);
+            return (
+              <GlassCard key={o.id} hover={false} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-[#D4AF37]">{o.id}</span>
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                        o.status === 'Paid' ? 'bg-green-500/10 text-green-400' :
+                        o.status === 'Ready' ? 'bg-emerald-500/10 text-emerald-400' :
+                        o.status === 'In Preparation' ? 'bg-blue-500/10 text-blue-400' :
+                        'bg-amber-500/10 text-amber-400'
+                      }`}>{o.status}</span>
+                      <span className="text-xs text-white/40">{o.clientName}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-white/40">
+                      {new Date(o.createdAt).toLocaleString()}
+                      {payment && <span className="ml-2 text-white/30">· Cashier: {payment.cashierName}</span>}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {o.items.map((it, i) => (
+                        <span key={i} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
+                          {it.quantity}x {it.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className="text-base font-bold text-[#D4AF37]">{o.total.toFixed(2)} DT</span>
+                    <button
+                      onClick={() => setConfirmDelete({ type: 'order', id: o.id })}
+                      className="rounded-lg border border-red-500/20 bg-red-500/5 p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
+                      title="Delete this order"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          })
+        )}
+      </div>
+
+      {/* Confirm Dialog */}
+      {createPortal(
+        <AnimatePresence>
+          {confirmDelete && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+              onClick={() => setConfirmDelete(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111] p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15">
+                    <AlertTriangle className="h-5 w-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold">Confirm Deletion</h3>
+                    <p className="text-xs text-white/40">This action cannot be undone.</p>
+                  </div>
+                </div>
+                <p className="text-sm text-white/70 mb-6">
+                  {confirmDelete.type === 'order' && `Delete order ${confirmDelete.id}? Its payment record will also be removed.`}
+                  {confirmDelete.type === 'today' && `Delete ALL ${payments.filter((p) => p.date === today).length} payment(s) from today?`}
+                  {confirmDelete.type === 'history' && `Delete ALL ${orders.length} orders and ${payments.length} payments from the entire history?`}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-medium text-white/70 hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirmDelete.type === 'order' && confirmDelete.id) handleDeleteOrder(confirmDelete.id);
+                      else if (confirmDelete.type === 'today') handleDeleteToday();
+                      else if (confirmDelete.type === 'history') handleDeleteHistory();
+                    }}
+                    className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-400"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
     </div>
   );

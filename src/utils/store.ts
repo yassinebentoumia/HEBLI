@@ -588,6 +588,24 @@ export function addPayment(payment: Payment): void {
   atomicWrite(KEYS.payments, payments);
 }
 
+export function deletePayment(id: string): void {
+  recordDeletion(KEYS.payments, id);
+  const payments = getPayments().filter((p) => p.id !== id);
+  atomicWrite(KEYS.payments, payments);
+}
+
+export function deleteOrder(id: string): void {
+  recordDeletion(KEYS.orders, id);
+  const orders = getOrders().filter((o) => o.id !== id);
+  saveOrders(orders);
+  // Also remove any payment(s) linked to this order
+  const payments = getPayments();
+  const toDelete = payments.filter((p) => p.orderId === id);
+  toDelete.forEach((p) => recordDeletion(KEYS.payments, p.id));
+  const remaining = payments.filter((p) => p.orderId !== id);
+  atomicWrite(KEYS.payments, remaining);
+}
+
 // Inventory
 export function getInventory(): InventoryItem[] {
   return safeRead<InventoryItem[]>(KEYS.inventory, defaultInventory);

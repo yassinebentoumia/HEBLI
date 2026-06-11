@@ -14,6 +14,7 @@ import {
   Volume2,
   VolumeX,
   DollarSign,
+  Search,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
@@ -24,33 +25,47 @@ import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
 import type { Order } from '@/types';
 
-// Notification beep using Web Audio
+// Loud, long, attention-grabbing "coffee shop bell" notification.
+// Plays a 2-tone chime 4 times over ~4 seconds.
 function playBeep() {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.5);
-    // second tone
-    const osc2 = ctx.createOscillator();
-    const gain2 = ctx.createGain();
-    osc2.connect(gain2);
-    gain2.connect(ctx.destination);
-    osc2.type = 'sine';
-    osc2.frequency.value = 1175;
-    gain2.gain.setValueAtTime(0.0001, ctx.currentTime + 0.25);
-    gain2.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + 0.27);
-    gain2.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.75);
-    osc2.start(ctx.currentTime + 0.25);
-    osc2.stop(ctx.currentTime + 0.75);
+    const Ctx: any = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    const master = ctx.createGain();
+    master.gain.value = 0.9; // overall loudness
+    master.connect(ctx.destination);
+
+    // A two-tone bell-like ding (E6 → A5) with a longer ringing decay.
+    const playChime = (offset: number) => {
+      const tones = [
+        { freq: 1318.5, start: 0.00, length: 0.85, vol: 0.55 }, // E6
+        { freq: 880.0, start: 0.18, length: 0.85, vol: 0.45 }, // A5
+        { freq: 1760.0, start: 0.00, length: 0.30, vol: 0.18 }, // A6 (sparkle)
+      ];
+      tones.forEach((t) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = t.freq;
+        osc.connect(g);
+        g.connect(master);
+        const start = ctx.currentTime + offset + t.start;
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(t.vol, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + t.length);
+        osc.start(start);
+        osc.stop(start + t.length + 0.05);
+      });
+    };
+
+    // Ring 4 times, ~1.0s apart → total ~4 seconds
+    playChime(0.00);
+    playChime(1.00);
+    playChime(2.00);
+    playChime(3.00);
   } catch { /* ignore */ }
 }
 
@@ -78,8 +93,21 @@ export default function BaristaDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const [search, setSearch] = useState('');
   const prevPendingRef = useRef(0);
   const initializedRef = useRef(false);
+
+  // Filter orders by search (id, client name, item names, note)
+  const matchesSearch = (o: Order) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.clientName.toLowerCase().includes(q) ||
+      (o.note || '').toLowerCase().includes(q) ||
+      o.items.some((i) => i.name.toLowerCase().includes(q))
+    );
+  };
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
@@ -145,9 +173,9 @@ export default function BaristaDashboard() {
     return getPayments().some((p) => p.orderId === orderId);
   };
 
-  const pendingOrders = orders.filter((o) => o.status === 'Pending');
-  const preparingOrders = orders.filter((o) => o.status === 'In Preparation');
-  const readyOrders = orders.filter((o) => o.status === 'Ready');
+  const pendingOrders = orders.filter((o) => o.status === 'Pending' && matchesSearch(o));
+  const preparingOrders = orders.filter((o) => o.status === 'In Preparation' && matchesSearch(o));
+  const readyOrders = orders.filter((o) => o.status === 'Ready' && matchesSearch(o));
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white">
@@ -169,7 +197,13 @@ export default function BaristaDashboard() {
           <div className="flex-1" />
 
           <button
-            onClick={() => setSoundOn((s) => !s)}
+            onClick={() => {
+              setSoundOn((s) => {
+                const next = !s;
+                if (next) playBeep(); // preview the new sound when enabling
+                return next;
+              });
+            }}
             className={`flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${
               soundOn
                 ? 'border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#D4AF37]'
@@ -204,7 +238,7 @@ export default function BaristaDashboard() {
 
       <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-8">
         {/* Stats */}
-        <div className="mb-8 grid grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-3 gap-4">
           <GlassCard hover={false} className="text-center">
             <div className="text-3xl font-bold text-amber-400">{pendingOrders.length}</div>
             <div className="mt-1 text-xs text-white/40 tracking-wider uppercase">En attente</div>
@@ -217,6 +251,26 @@ export default function BaristaDashboard() {
             <div className="text-3xl font-bold text-emerald-400">{readyOrders.length}</div>
             <div className="mt-1 text-xs text-white/40 tracking-wider uppercase">Prêtes</div>
           </GlassCard>
+        </div>
+
+        {/* Search */}
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher commande, client, produit, note..."
+            className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] py-3 pl-11 pr-10 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#D4AF37]/50"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/5"
+            >
+              ×
+            </button>
+          )}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
