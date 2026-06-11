@@ -6,8 +6,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, MessageCircle, LogOut, Power, X, Clock } from 'lucide-react';
-import SyncSetup from '@/components/SyncSetup';
+import { Bell, MessageCircle, LogOut, Power, X, Clock, Cloud, CloudOff, Loader2 } from 'lucide-react';
 import ChatPanel from '@/components/ChatPanel';
 import { useApp } from '@/contexts/AppContext';
 import {
@@ -30,7 +29,7 @@ interface StaffTopBarProps {
 }
 
 export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
-  const { user, syncTick } = useApp();
+  const { user, syncTick, syncStatus } = useApp();
   const [onDuty, setOnDuty] = useState(false);
   const [dutySeconds, setDutySeconds] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
@@ -162,8 +161,32 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
           <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5" />
         </button>
 
-        {/* Sync */}
-        <SyncSetup />
+        {/* Sync status indicator (auto, no setup) */}
+        <div
+          className={`flex items-center gap-1.5 rounded-xl border px-2 sm:px-2.5 py-2 text-[10px] font-semibold ${
+            syncStatus === 'online'
+              ? 'border-green-500/20 bg-green-500/5 text-green-400'
+              : syncStatus === 'offline'
+              ? 'border-red-500/20 bg-red-500/5 text-red-400'
+              : 'border-amber-500/20 bg-amber-500/5 text-amber-400'
+          }`}
+          title={
+            syncStatus === 'online' ? 'Live sync — all devices in real time'
+              : syncStatus === 'offline' ? 'Server unreachable — working offline'
+              : 'Connecting...'
+          }
+        >
+          {syncStatus === 'connecting' ? (
+            <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+          ) : syncStatus === 'online' ? (
+            <Cloud className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          ) : (
+            <CloudOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          )}
+          <span className="hidden md:inline tracking-wider uppercase">
+            {syncStatus === 'online' ? 'Live' : syncStatus === 'offline' ? 'Offline' : '...'}
+          </span>
+        </div>
 
         {/* Logout */}
         <button

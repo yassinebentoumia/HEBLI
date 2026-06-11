@@ -1,5 +1,5 @@
 // ============================================================
-// HEBLI – Global App Context (Auto Cross-Device Cloud Sync)
+// HEBLI – Global App Context (Auto Cross-Device Sync)
 // ============================================================
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
@@ -13,7 +13,7 @@ import {
   createBackup,
   addAuditLog,
 } from '@/utils/store';
-import { pullRemote, pushRemote, isSynced, getCafeCode, joinCafe } from '@/utils/sync';
+import { pullRemote, pushRemote, isOnline } from '@/utils/sync';
 
 interface AppContextType {
   user: Staff | null;
@@ -44,7 +44,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<'connecting' | 'online' | 'offline'>('connecting');
   const initialized = useRef(false);
 
-  // Bootstrap auto-sync
   useEffect(() => {
     if (initialized.current) return;
     initialized.current = true;
@@ -54,53 +53,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setOrders(getOrders());
     createBackup();
 
+    // Initial pull from server
     (async () => {
-      // 1. Check if URL hash contains ?cafe=CODE — auto-join that café.
-      try {
-        const hash = window.location.hash || '';
-        const queryStart = hash.indexOf('?');
-        if (queryStart !== -1) {
-          const params = new URLSearchParams(hash.substring(queryStart + 1));
-          const urlCafe = params.get('cafe');
-          if (urlCafe && urlCafe !== getCafeCode()) {
-            const ok = await joinCafe(urlCafe);
-            if (ok) {
-              localStorage.setItem('hebli_shared_cafe_published', urlCafe);
-            }
-          }
-        }
-      } catch { /* ignore */ }
-
-      // 2. Use the device's existing café code if present.
-      const code = getCafeCode();
-      if (code) {
-        const ok = await pullRemote();
-        setSyncStatus('online');
-        if (ok) {
-          setOrders(getOrders());
-          setSyncTick((t) => t + 1);
-        }
-      } else {
-        // No café connected yet — owner must create one and share the code.
-        setSyncStatus('offline');
+      const changed = await pullRemote();
+      setSyncStatus(isOnline() ? 'online' : 'offline');
+      if (changed) {
+        setOrders(getOrders());
+        setSyncTick((t) => t + 1);
+        // Refresh current user too (in case staff list was updated remotely)
+        setUser(getCurrentUser());
       }
+      // Push local data up so the server has anything we created offline.
+      await pushRemote();
     })();
 
-    // Sync poll every 2 seconds
+    // Poll every 2s for remote changes
     const syncPoll = setInterval(async () => {
-      if (isSynced()) {
-        try {
-          const changed = await pullRemote();
-          setSyncStatus('online');
-          if (changed) {
-            setOrders(getOrders());
-            setSyncTick((t) => t + 1);
-          } else {
-            setOrders(getOrders());
-          }
-        } catch {
-          setSyncStatus('offline');
-        }
+      const changed = await pullRemote();
+      setSyncStatus(isOnline() ? 'online' : 'offline');
+      if (changed) {
+        setOrders(getOrders());
+        setSyncTick((t) => t + 1);
       } else {
         setOrders(getOrders());
       }
@@ -114,7 +87,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const login = useCallback((pin: string) => {
+  const login = useCallback(async (pin: string) => {
+    // Pull latest staff list before validating PIN — fixes "account doesn't exist on phone"
+    await pullRemote();
     const staff = loginStaff(pin);
     if (staff) {
       setUser(staff);
@@ -160,7 +135,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   return (
-    <AppContext.Provider value={{ user, orders, syncTick, syncStatus, login, logoutUser, refreshOrders, addLog }}>
+    <AppContext.Provider
+      value={{
+        user, orders, syncTick, syncStatus,
+        login: login as any, // async wrapper still typed as sync for back-compat
+        logoutUser, refreshOrders, addLog,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
