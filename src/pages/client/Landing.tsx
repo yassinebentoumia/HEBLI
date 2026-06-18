@@ -12,10 +12,14 @@ import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
 import { getActiveProducts, getCategories, getCategoryIcon } from '@/utils/store';
+import { useT } from '@/i18n/I18nProvider';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import InstallAppButton from '@/components/InstallAppButton';
 import type { Product, Category } from '@/types';
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -42,29 +46,35 @@ export default function Landing() {
           </button>
 
           {/* Desktop Nav */}
-          <div className="hidden sm:flex items-center gap-6">
+          <div className="hidden sm:flex items-center gap-5">
             <button onClick={() => navigate('/client/menu')} className="text-sm text-white/50 hover:text-white transition-colors">
-              Menu
+              {t('nav.menu')}
             </button>
             <button onClick={() => navigate('/client/track')} className="text-sm text-white/50 hover:text-white transition-colors">
-              Track Order
+              {t('nav.track')}
             </button>
             <button onClick={() => navigate('/client/support')} className="text-sm text-white/50 hover:text-white transition-colors">
-              Support
+              {t('nav.support')}
             </button>
+            <InstallAppButton />
+            <LanguageSwitcher />
             <button onClick={() => navigate('/staff')} className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-1.5 text-xs text-white/40 hover:text-white hover:border-white/20 transition-colors">
               <Shield className="h-3 w-3" />
-              Staff Portal
+              {t('nav.staff')}
             </button>
           </div>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="sm:hidden rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5"
-          >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
-          </button>
+          {/* Mobile right cluster */}
+          <div className="sm:hidden flex items-center gap-2">
+            <InstallAppButton />
+            <LanguageSwitcher />
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5"
+            >
+              {mobileMenuOpen ? <X className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Nav */}
@@ -74,17 +84,17 @@ export default function Landing() {
             animate={{ opacity: 1, height: 'auto' }}
             className="sm:hidden border-t border-white/[0.06] bg-[#0A0A0A] px-4 py-4 space-y-3"
           >
-            <button onClick={() => { navigate('/client/menu'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-white/70 hover:text-white py-2">
-              📋 Browse Menu
+            <button onClick={() => { navigate('/client/menu'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
+              📋 {t('nav.menu')}
             </button>
-            <button onClick={() => { navigate('/client/track'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-white/70 hover:text-white py-2">
-              🔍 Track Order
+            <button onClick={() => { navigate('/client/track'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
+              🔍 {t('nav.track')}
             </button>
-            <button onClick={() => { navigate('/client/support'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-white/70 hover:text-white py-2">
-              💬 Support / Reclamation
+            <button onClick={() => { navigate('/client/support'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
+              💬 {t('nav.support')}
             </button>
-            <button onClick={() => { navigate('/staff'); setMobileMenuOpen(false); }} className="block w-full text-left text-sm text-[#D4AF37] hover:text-amber-300 py-2">
-              🛡️ Staff Portal
+            <button onClick={() => { navigate('/staff'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-[#D4AF37] hover:text-amber-300 py-2">
+              🛡️ {t('nav.staff')}
             </button>
           </motion.div>
         )}
@@ -148,7 +158,7 @@ export default function Landing() {
           >
             <Sparkles className="h-4 w-4 text-[#D4AF37]" />
             <span className="text-xs font-medium tracking-[0.2em] text-[#D4AF37] uppercase">
-              Premium Coffee Experience
+              {t('landing.tagline')}
             </span>
           </motion.div>
 
@@ -164,7 +174,7 @@ export default function Landing() {
             transition={{ delay: 0.3, duration: 0.8 }}
             className="mx-auto mt-6 max-w-lg text-base text-white/50 sm:text-lg"
           >
-            Where every cup tells a story. Experience the art of premium coffee, crafted with passion and precision.
+            {t('landing.hero.subtitle')}
           </motion.p>
 
           <motion.div
@@ -174,11 +184,11 @@ export default function Landing() {
             className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
           >
             <GoldButton size="lg" onClick={() => navigate('/client/menu')}>
-              Browse Menu
+              {t('landing.browse')}
               <ChevronRight className="h-4 w-4" />
             </GoldButton>
             <GoldButton variant="outline" size="lg" onClick={() => navigate('/client/track')}>
-              Track Order
+              {t('nav.track')}
             </GoldButton>
           </motion.div>
 
@@ -190,9 +200,9 @@ export default function Landing() {
             className="mt-16 grid grid-cols-3 gap-8 border-t border-white/[0.06] pt-8"
           >
             {[
-              { value: `${products.length}+`, label: 'Premium Drinks' },
-              { value: '4.9', label: 'Rating' },
-              { value: '24/7', label: 'Service' },
+              { value: `${products.length}+`, label: t('landing.stats.drinks') },
+              { value: '4.9', label: t('landing.stats.rating') },
+              { value: '24/7', label: t('landing.stats.service') },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="text-2xl font-bold text-[#D4AF37]">{stat.value}</div>
@@ -226,10 +236,10 @@ export default function Landing() {
           >
             <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-1.5 text-xs tracking-[0.2em] text-white/40 uppercase">
               <Coffee className="h-3 w-3" />
-              Our Collection
+              {t('landing.collection')}
             </div>
             <h2 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-              Signature <span className="text-[#D4AF37]">Creations</span>
+              {t('landing.signature')} <span className="text-[#D4AF37]">{t('landing.creations')}</span>
             </h2>
           </motion.div>
 
@@ -243,7 +253,7 @@ export default function Landing() {
                   : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
               }`}
             >
-              ✦ All
+              ✦ {t('menu.all')}
             </button>
             {categories.map((cat) => (
               <button
@@ -310,7 +320,7 @@ export default function Landing() {
           <div className="mt-12 text-center">
             <GoldButton size="lg" onClick={() => navigate('/client/menu')}>
               <ShoppingBag className="h-4 w-4" />
-              Start Your Order
+              {t('landing.start')}
               <ArrowRight className="h-4 w-4" />
             </GoldButton>
           </div>
@@ -335,7 +345,7 @@ export default function Landing() {
           >
             <div>
               <h3 className="text-3xl font-bold tracking-tight text-[#D4AF37]">HEBLI</h3>
-              <p className="mt-1 text-sm text-white/30">Premium Coffee Experience &copy; 2026</p>
+              <p className="mt-1 text-sm text-white/30">{t('landing.tagline')} &copy; 2026</p>
             </div>
 
             <div className="flex items-center gap-3">
@@ -346,7 +356,7 @@ export default function Landing() {
 
             <div className="flex flex-col items-center gap-2">
               <p className="text-[11px] tracking-[0.35em] text-white/30 uppercase">
-                Created <span className="text-[#D4AF37]"></span> by
+                {t('landing.footer.createdWith')} <span className="text-[#D4AF37]">♥</span> {t('landing.footer.by')}
               </p>
               <motion.span
                 whileHover={{ scale: 1.05 }}
@@ -373,7 +383,7 @@ export default function Landing() {
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full bg-[#D4AF37] px-5 py-4 text-black font-bold shadow-2xl shadow-[#D4AF37]/30 hover:bg-amber-400 transition-colors"
       >
         <MessageCircle className="h-5 w-5" />
-        <span className="hidden sm:inline text-sm">Need help?</span>
+        <span className="hidden sm:inline text-sm">{t('landing.help')}</span>
       </motion.button>
     </div>
   );

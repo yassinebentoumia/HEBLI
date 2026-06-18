@@ -9,11 +9,14 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { useT } from '@/i18n/I18nProvider';
 import { getActiveProducts, getCategories, getCategoryIcon, addOrder, addAuditLog, addNotification } from '@/utils/store';
 import type { Product, CartItem, Category } from '@/types';
 
 export default function Menu() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -144,12 +147,12 @@ export default function Menu() {
           >
             <Check className="h-10 w-10 text-green-400" />
           </motion.div>
-          <h2 className="text-3xl font-bold text-white">Order Confirmed!</h2>
-          <p className="mt-2 text-white/50">Your order has been placed successfully.</p>
+          <h2 className="text-3xl font-bold text-white">{t('order.confirmed')}</h2>
+          <p className="mt-2 text-white/50">{t('order.confirmedHint')}</p>
           <GlassCard className="mt-6 mx-auto max-w-sm">
-            <div className="text-sm text-white/40">Order ID</div>
+            <div className="text-sm text-white/40">{t('order.orderId')}</div>
             <div className="mt-1 text-2xl font-bold text-[#D4AF37] tracking-wider">{orderId}</div>
-            <div className="mt-4 text-sm text-white/40">Total</div>
+            <div className="mt-4 text-sm text-white/40">{t('common.total')}</div>
             <div className="text-xl font-bold text-white">{finalTotal.toFixed(2)} DT</div>
           </GlassCard>
           <div className="mt-8 flex gap-4 justify-center">
@@ -157,13 +160,13 @@ export default function Menu() {
               onClick={() => setOrderPlaced(false)}
               className="rounded-xl border border-white/10 px-6 py-3 text-sm font-medium text-white/70 hover:text-white hover:border-white/20 transition-all"
             >
-              Order More
+              {t('order.orderMore')}
             </button>
             <button
               onClick={() => navigate(`/client/track?order=${orderId}`)}
               className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black hover:bg-amber-400 transition-all"
             >
-              Track Order
+              {t('order.trackOrder')}
             </button>
           </div>
         </motion.div>
@@ -188,9 +191,10 @@ export default function Menu() {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <h1 className="text-xl font-bold tracking-tight">
-            <span className="text-[#D4AF37]">HEBLI</span> Menu
+            <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{t('menu.title')}</span>
           </h1>
           <div className="flex-1" />
+          <LanguageSwitcher />
           <button
             onClick={() => setCartOpen(true)}
             className="relative rounded-xl border border-white/[0.08] bg-white/[0.03] p-2.5 text-white/70 hover:text-white hover:border-white/20 transition-colors"
@@ -222,13 +226,13 @@ export default function Menu() {
             className="inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/5 px-4 py-1.5 mb-4"
           >
             <Sparkles className="h-3.5 w-3.5 text-[#D4AF37]" />
-            <span className="text-xs font-semibold tracking-[0.15em] text-[#D4AF37] uppercase">Premium Selection</span>
+            <span className="text-xs font-semibold tracking-[0.15em] text-[#D4AF37] uppercase">{t('menu.premiumSelection')}</span>
           </motion.div>
           <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
-            Crafted to <span className="text-[#D4AF37]">Perfection</span>
+            {t('menu.crafted')} <span className="text-[#D4AF37]">{t('menu.perfection')}</span>
           </h2>
           <p className="text-white/40 max-w-md mx-auto">
-            Explore our signature creations, made with the finest ingredients.
+            {t('menu.tagline')}
           </p>
         </motion.div>
 
@@ -237,7 +241,7 @@ export default function Menu() {
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
           <input
             type="text"
-            placeholder="Search drinks..."
+            placeholder={t('menu.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50 transition-colors"
@@ -255,7 +259,7 @@ export default function Menu() {
                 : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
             }`}
           >
-            ✦ All
+            ✦ {t('menu.all')}
           </motion.button>
           {categories.map((cat) => (
             <motion.button
@@ -343,7 +347,7 @@ export default function Menu() {
         {filtered.length === 0 && (
           <div className="py-20 text-center text-white/30">
             <Coffee className="mx-auto h-12 w-12 opacity-30" />
-            <p className="mt-4">No products found.</p>
+            <p className="mt-4">{t('menu.noResults')}</p>
           </div>
         )}
       </main>
@@ -369,8 +373,8 @@ export default function Menu() {
               <div className="flex flex-col h-full">
                 <div className="flex items-center justify-between p-6 border-b border-white/[0.04]">
                   <div>
-                    <h2 className="text-lg font-bold">Your Order</h2>
-                    <p className="text-sm text-white/30">{totalItems} item{totalItems !== 1 ? 's' : ''}</p>
+                    <h2 className="text-lg font-bold">{t('cart.title')}</h2>
+                    <p className="text-sm text-white/30">{totalItems} {totalItems === 1 ? t('cart.itemCount') : t('cart.itemsCount')}</p>
                   </div>
                   <button onClick={() => setCartOpen(false)} className="rounded-xl p-2 text-white/40 hover:text-white hover:bg-white/[0.04]">
                     <X className="h-5 w-5" />
@@ -381,8 +385,8 @@ export default function Menu() {
                   {cart.length === 0 ? (
                     <div className="py-20 text-center">
                       <ShoppingCart className="mx-auto h-12 w-12 text-white/10" />
-                      <p className="mt-4 text-white/30">Your cart is empty</p>
-                      <p className="text-sm text-white/15">Add some delicious items!</p>
+                      <p className="mt-4 text-white/30">{t('cart.empty')}</p>
+                      <p className="text-sm text-white/15">{t('cart.emptyHint')}</p>
                     </div>
                   ) : (
                     <div className="space-y-3">
@@ -397,7 +401,7 @@ export default function Menu() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{item.name}</div>
-                            <div className="text-xs text-white/30">{item.price.toFixed(2)} DT each</div>
+                            <div className="text-xs text-white/30">{item.price.toFixed(2)} DT {t('cart.eachPrice')}</div>
                           </div>
                           <div className="flex items-center gap-2">
                             <button onClick={() => removeFromCart(item.productId)} className="rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/[0.04]">
@@ -420,19 +424,19 @@ export default function Menu() {
                 {cart.length > 0 && (
                   <div className="p-6 border-t border-white/[0.04] space-y-4">
                     <div className="flex justify-between items-center">
-                      <span className="text-white/40">Total</span>
+                      <span className="text-white/40">{t('common.total')}</span>
                       <span className="text-2xl font-bold">{total.toFixed(2)} DT</span>
                     </div>
                     <div className="space-y-3">
                       <input
                         type="text"
-                        placeholder="Your name"
+                        placeholder={t('cart.yourName')}
                         value={clientName}
                         onChange={e => setClientName(e.target.value)}
                         className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20"
                       />
                       <textarea
-                        placeholder="Add a note (e.g. no sugar, extra hot, oat milk...)"
+                        placeholder={t('cart.notePlaceholder')}
                         value={orderNote}
                         onChange={e => setOrderNote(e.target.value)}
                         rows={2}
@@ -444,7 +448,7 @@ export default function Menu() {
                       disabled={!clientName.trim()}
                       className="w-full rounded-2xl bg-[#D4AF37] py-4 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
-                      Place Order • {total.toFixed(2)} DT
+                      {t('cart.placeOrder')} • {total.toFixed(2)} DT
                     </button>
                   </div>
                 )}

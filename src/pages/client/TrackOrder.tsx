@@ -7,14 +7,17 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2, Circle, Timer, CreditCard, PackageOpen, User, Coffee, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
+import { useT } from '@/i18n/I18nProvider';
+import type { TranslationKey } from '@/i18n/translations';
 import { getOrders } from '@/utils/store';
 import type { Order, OrderStatus } from '@/types';
 
-const statusSteps: { status: OrderStatus; icon: typeof Clock; label: string; description: string }[] = [
-  { status: 'Pending', icon: Clock, label: 'Order Received', description: 'Your order has been placed and is awaiting processing.' },
-  { status: 'In Preparation', icon: Timer, label: 'In Preparation', description: 'Our barista is crafting your drinks with care.' },
-  { status: 'Ready', icon: PackageOpen, label: 'Ready for Pickup', description: 'Your order is ready! Please proceed to the cashier to pay and collect.' },
-  { status: 'Paid', icon: CreditCard, label: 'Payment Confirmed', description: 'Payment successful. Enjoy your premium coffee!' },
+const statusSteps: { status: OrderStatus; icon: typeof Clock; labelKey: TranslationKey; descKey: TranslationKey }[] = [
+  { status: 'Pending', icon: Clock, labelKey: 'step.received', descKey: 'step.receivedDesc' },
+  { status: 'In Preparation', icon: Timer, labelKey: 'status.preparation', descKey: 'step.prepDesc' },
+  { status: 'Ready', icon: PackageOpen, labelKey: 'step.readyPickup', descKey: 'step.readyDesc' },
+  { status: 'Paid', icon: CreditCard, labelKey: 'step.paidConfirmed', descKey: 'step.paidDesc' },
 ];
 
 const statusColor: Record<OrderStatus, string> = {
@@ -26,6 +29,7 @@ const statusColor: Record<OrderStatus, string> = {
 
 export default function TrackOrder() {
   const navigate = useNavigate();
+  const { t } = useT();
   const [clientName, setClientName] = useState('');
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -87,7 +91,9 @@ export default function TrackOrder() {
             <button onClick={() => navigate('/')} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5 transition-colors">
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h1 className="text-xl font-bold tracking-tight"><span className="text-[#D4AF37]">HEBLI</span> Track Order</h1>
+            <h1 className="text-xl font-bold tracking-tight"><span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{t('track.title')}</span></h1>
+            <div className="flex-1" />
+            <LanguageSwitcher />
           </div>
         </header>
 
@@ -95,13 +101,13 @@ export default function TrackOrder() {
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-[#D4AF37]/10 text-4xl">
             <User className="h-8 w-8 text-[#D4AF37]" />
           </div>
-          <h2 className="text-2xl font-bold">Welcome Back!</h2>
-          <p className="mt-2 text-white/40">Enter your name to see your active orders.</p>
+          <h2 className="text-2xl font-bold">{t('track.welcome')}</h2>
+          <p className="mt-2 text-white/40">{t('track.enterName')}</p>
 
           <GlassCard className="mt-8">
             <input
               type="text"
-              placeholder="Enter your name..."
+              placeholder={t('cart.yourName')}
               value={inputName}
               onChange={(e) => setInputName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleFindOrders()}
@@ -111,7 +117,7 @@ export default function TrackOrder() {
               onClick={handleFindOrders}
               className="w-full rounded-xl bg-[#D4AF37] py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors"
             >
-              See My Orders
+              {t('track.seeMyOrders')}
             </button>
           </GlassCard>
         </main>
@@ -126,8 +132,9 @@ export default function TrackOrder() {
           <button onClick={() => navigate('/')} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5 transition-colors">
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <h1 className="text-xl font-bold tracking-tight"><span className="text-[#D4AF37]">HEBLI</span> My Orders</h1>
+          <h1 className="text-xl font-bold tracking-tight"><span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{t('track.myOrders')}</span></h1>
           <div className="flex-1" />
+          <LanguageSwitcher />
           <button onClick={handleLogout} className="rounded-xl p-2 text-white/30 hover:text-white hover:bg-white/5 transition-colors" title="Switch user">
             <LogOut className="h-5 w-5" />
           </button>
@@ -289,8 +296,8 @@ export default function TrackOrder() {
                           )}
                         </div>
                         <div className={`flex-1 pt-1 ${!isCompleted ? 'opacity-30' : ''}`}>
-                          <div className={`text-sm font-semibold ${isCurrent ? 'text-[#D4AF37]' : 'text-white'}`}>{step.label}</div>
-                          <div className="mt-0.5 text-xs text-white/40">{step.description}</div>
+                          <div className={`text-sm font-semibold ${isCurrent ? 'text-[#D4AF37]' : 'text-white'}`}>{t(step.labelKey)}</div>
+                          <div className="mt-0.5 text-xs text-white/40">{t(step.descKey)}</div>
                         </div>
                       </motion.div>
                     );

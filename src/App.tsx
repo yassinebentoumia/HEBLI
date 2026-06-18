@@ -5,6 +5,7 @@
 
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from '@/contexts/AppContext';
+import { I18nProvider } from '@/i18n/I18nProvider';
 import LoadingScreen from '@/components/LoadingScreen';
 
 // Lazy-loaded pages
@@ -44,27 +45,29 @@ function PageLoader() {
 export default function App() {
   return (
     <HashRouter>
-      <AppProvider>
-        <LoadingScreen />
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* Client Portal */}
-            <Route path="/" element={<Landing />} />
-            <Route path="/client/menu" element={<Menu />} />
-            <Route path="/client/track" element={<TrackOrder />} />
-            <Route path="/client/support" element={<Support />} />
+      <I18nProvider>
+        <AppProvider>
+          <LoadingScreen />
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Client Portal */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/client/menu" element={<Menu />} />
+              <Route path="/client/track" element={<TrackOrder />} />
+              <Route path="/client/support" element={<Support />} />
 
-            {/* Staff Portal */}
-            <Route path="/staff" element={<StaffLogin />} />
-            <Route path="/barista" element={<BaristaDashboard />} />
-            <Route path="/cashier" element={<CashierDashboard />} />
-            <Route path="/owner" element={<OwnerDashboard />} />
+              {/* Staff Portal */}
+              <Route path="/staff" element={<StaffLogin />} />
+              <Route path="/barista" element={<BaristaDashboard />} />
+              <Route path="/cashier" element={<CashierDashboard />} />
+              <Route path="/owner" element={<OwnerDashboard />} />
 
-            {/* Fallback */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </AppProvider>
+              {/* Fallback */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </AppProvider>
+      </I18nProvider>
     </HashRouter>
   );
 }
