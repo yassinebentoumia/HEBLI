@@ -358,15 +358,45 @@ export default function Landing() {
               <p className="text-[11px] tracking-[0.35em] text-white/30 uppercase">
                 {t('landing.footer.createdWith')} <span className="text-[#D4AF37]">♥</span> {t('landing.footer.by')}
               </p>
-              <motion.span
+              <motion.a
+                href="https://www.instagram.com/ysn.bnt/"
+                target="_blank"
+                rel="noopener noreferrer"
                 whileHover={{ scale: 1.05 }}
-                className="group relative text-lg sm:text-xl font-bold tracking-wide bg-gradient-to-r from-[#D4AF37] via-amber-200 to-[#D4AF37] bg-clip-text text-transparent bg-[length:200%_auto] transition-all duration-500 cursor-default"
-                style={{ backgroundPosition: '0% 50%' }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '100% 50%'; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '0% 50%'; }}
+                className="group relative inline-flex items-center gap-2 text-lg sm:text-xl font-bold tracking-wide transition-all duration-500 cursor-pointer"
+                title="Visit Yassine on Instagram @ysn.bnt"
               >
-                Yassine Bentoumia
-              </motion.span>
+                <span
+                  className="bg-gradient-to-r from-[#D4AF37] via-amber-200 to-[#D4AF37] bg-clip-text text-transparent bg-[length:200%_auto] transition-all duration-500"
+                  style={{ backgroundPosition: '0% 50%' }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '100% 50%'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.backgroundPosition = '0% 50%'; }}
+                >
+                  Yassine Bentoumia
+                </span>
+                {/* Instagram glyph (inline SVG) */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4 text-[#D4AF37] opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300"
+                  aria-hidden="true"
+                >
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+                </svg>
+                {/* Underline that grows on hover */}
+                <span className="absolute -bottom-1 left-0 right-0 mx-auto h-px w-0 bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent group-hover:w-full transition-all duration-500" />
+              </motion.a>
+              {/* Instagram handle below */}
+              <span className="text-[10px] tracking-[0.25em] text-white/25 uppercase">
+                @ysn.bnt
+              </span>
             </div>
           </motion.div>
         </div>
