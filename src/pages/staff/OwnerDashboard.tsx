@@ -1931,7 +1931,7 @@ function AIAssistantTab() {
         setMessages((prev) => [...prev, {
           role: 'assistant',
           content: msgErr.includes('No AI provider')
-            ? `⚠️ **AI is not configured yet.**\n\nTo enable the agent, set one of these environment variables on your server:\n\n• \`OPENAI_API_KEY\`  → uses GPT-4o-mini\n• \`ANTHROPIC_API_KEY\` → uses Claude 3.5 Haiku\n• \`GEMINI_API_KEY\` → uses Gemini 2.0 Flash\n\nThen redeploy. The agent will instantly come alive.`
+            ? `⚠️ **AI is not configured yet.**\n\nPick a **FREE** provider and set one env var on your server:\n\n🆓 **GROQ_API_KEY** → free + super fast (Llama 3.3 70B). Get it at console.groq.com/keys\n🆓 **OPENROUTER_API_KEY** → free Llama/DeepSeek/Qwen models. Get it at openrouter.ai/keys\n🆓 **GEMINI_API_KEY** → 1500 free/day. Get it at aistudio.google.com/apikey\n\n💳 Paid options: \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`\n\nAdd it on Render → Environment → save. Redeploys automatically.`
             : `Sorry, I had trouble answering: ${msgErr}`,
         }]);
       } else {
@@ -1981,9 +1981,11 @@ function AIAssistantTab() {
           <div>
             <div className="text-sm font-bold leading-tight">HEBLI AI</div>
             <div className="text-[10px] uppercase tracking-wider text-white/40">
+              {provider === 'groq' && 'Groq · Llama 3.3 · live'}
+              {provider === 'openrouter' && 'OpenRouter · live'}
+              {provider === 'gemini' && 'Gemini · live'}
               {provider === 'openai' && 'GPT · live'}
               {provider === 'anthropic' && 'Claude · live'}
-              {provider === 'gemini' && 'Gemini · live'}
               {!provider && 'No model configured'}
             </div>
           </div>

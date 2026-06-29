@@ -126,29 +126,68 @@ app.get('/api/health', (_req, res) => {
 // ============================================================
 
 function aiProvider() {
+  // Order = priority. The free providers (Groq, OpenRouter, Gemini) are first.
+  if (process.env.GROQ_API_KEY) return 'groq';
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
+  if (process.env.GEMINI_API_KEY) return 'gemini';
   if (process.env.OPENAI_API_KEY) return 'openai';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  if (process.env.GEMINI_API_KEY) return 'gemini';
   return null;
 }
 
-async function callOpenAI(systemPrompt, history) {
-  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+// Generic OpenAI-compatible caller — works for OpenAI, Groq, OpenRouter, DeepSeek, etc.
+async function callOpenAICompatible({ endpoint, apiKey, model, systemPrompt, history, extraHeaders }) {
   const messages = [{ role: 'system', content: systemPrompt }, ...history];
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+  const r = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${apiKey}`,
+      ...(extraHeaders || {}),
     },
     body: JSON.stringify({ model, messages, temperature: 0.4 }),
   });
   if (!r.ok) {
     const text = await r.text();
-    throw new Error(`OpenAI ${r.status}: ${text.slice(0, 200)}`);
+    throw new Error(`${r.status}: ${text.slice(0, 300)}`);
   }
   const data = await r.json();
   return data.choices?.[0]?.message?.content || '(no response)';
+}
+
+async function callOpenAI(systemPrompt, history) {
+  return callOpenAICompatible({
+    endpoint: 'https://api.openai.com/v1/chat/completions',
+    apiKey: process.env.OPENAI_API_KEY,
+    model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    systemPrompt, history,
+  });
+}
+
+// Groq — FREE & FAST (Llama 3.3 70B, DeepSeek, Qwen, etc.)
+// Sign up: https://console.groq.com/keys
+async function callGroq(systemPrompt, history) {
+  return callOpenAICompatible({
+    endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+    apiKey: process.env.GROQ_API_KEY,
+    model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+    systemPrompt, history,
+  });
+}
+
+// OpenRouter — FREE models like Llama 3.3 70B, DeepSeek V3, Qwen, Mistral
+// Sign up: https://openrouter.ai/settings/keys
+async function callOpenRouter(systemPrompt, history) {
+  return callOpenAICompatible({
+    endpoint: 'https://openrouter.ai/api/v1/chat/completions',
+    apiKey: process.env.OPENROUTER_API_KEY,
+    model: process.env.OPENROUTER_MODEL || 'meta-llama/llama-3.3-70b-instruct:free',
+    systemPrompt, history,
+    extraHeaders: {
+      'HTTP-Referer': process.env.OPENROUTER_REFERER || 'https://hebli.app',
+      'X-Title': 'HEBLI Coffee',
+    },
+  });
 }
 
 async function callAnthropic(systemPrompt, history) {
@@ -240,9 +279,11 @@ app.post('/api/ai', async (req, res) => {
 
   try {
     let reply;
-    if (provider === 'openai') reply = await callOpenAI(systemPrompt, history);
+    if (provider === 'groq') reply = await callGroq(systemPrompt, history);
+    else if (provider === 'openrouter') reply = await callOpenRouter(systemPrompt, history);
+    else if (provider === 'gemini') reply = await callGemini(systemPrompt, history);
+    else if (provider === 'openai') reply = await callOpenAI(systemPrompt, history);
     else if (provider === 'anthropic') reply = await callAnthropic(systemPrompt, history);
-    else reply = await callGemini(systemPrompt, history);
     res.json({ reply, provider });
   } catch (e) {
     console.error('AI error:', e);
