@@ -6,13 +6,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, MessageCircle, LogOut, Power, X, Clock, Cloud, CloudOff, Loader2 } from 'lucide-react';
+import { Bell, MessageCircle, LogOut, X, Clock, Cloud, CloudOff, Loader2, Star } from 'lucide-react';
 import ChatPanel from '@/components/ChatPanel';
 import { useApp } from '@/contexts/AppContext';
 import {
-  startSession, endSession, getActiveSessions, getStaffDayDuration,
-  getNotificationsFor, markAllNotificationsRead,
+  getStaffDayDuration, getNotificationsFor, markAllNotificationsRead,
 } from '@/utils/store';
+import { getStaffTitle } from '@/utils/roles';
 import type { AppNotification } from '@/types';
 
 function fmtDuration(sec: number): string {
@@ -30,25 +30,13 @@ interface StaffTopBarProps {
 
 export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
   const { user, syncTick, syncStatus } = useApp();
-  const [onDuty, setOnDuty] = useState(false);
   const [dutySeconds, setDutySeconds] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<AppNotification[]>([]);
-  const sessionId = useRef<string | null>(null);
   const prevNotifCount = useRef(0);
 
-  // Restore duty state for this user (in case of refresh)
-  useEffect(() => {
-    if (!user) return;
-    const active = getActiveSessions().find((s) => s.staffId === user.id);
-    if (active) {
-      sessionId.current = active.id;
-      setOnDuty(true);
-    }
-  }, [user]);
-
-  // Live duty timer
+  // Live duty timer — auto runs while the user is logged in
   useEffect(() => {
     if (!user) return;
     const update = () => {
@@ -58,7 +46,7 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
     update();
     const int = setInterval(update, 1000);
     return () => clearInterval(int);
-  }, [user, onDuty]);
+  }, [user]);
 
   // Load notifications + sound on new
   const loadNotifs = useCallback(() => {
@@ -89,21 +77,7 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
     return () => clearInterval(int);
   }, [loadNotifs, syncTick]);
 
-  const toggleDuty = () => {
-    if (!user) return;
-    if (onDuty) {
-      if (sessionId.current) endSession(sessionId.current);
-      sessionId.current = null;
-      setOnDuty(false);
-    } else {
-      const sid = startSession({ id: user.id, name: user.name, role: user.role });
-      sessionId.current = sid;
-      setOnDuty(true);
-    }
-  };
-
   const handleLogout = () => {
-    if (onDuty && sessionId.current) endSession(sessionId.current);
     onLogout();
   };
 
@@ -114,29 +88,44 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
   };
 
   const unreadCount = notifs.filter((n) => !n.read).length;
+  const staffTitle = user ? getStaffTitle(user) : '';
+  const stars = (user?.rating ?? 0) as 0 | 1 | 2 | 3;
 
   return (
     <>
       <div className="flex items-center gap-1 sm:gap-2 flex-wrap justify-end">
-        {/* On-Duty Toggle */}
-        <button
-          onClick={toggleDuty}
-          className={`flex items-center gap-1.5 rounded-xl border px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold transition-colors ${
-            onDuty
-              ? 'border-green-500/30 bg-green-500/10 text-green-400'
-              : 'border-white/[0.08] bg-white/[0.02] text-white/50 hover:text-white'
-          }`}
-          title={onDuty ? 'On duty — tap to clock out' : 'Off duty — tap to clock in'}
+        {/* Live On-Duty Timer (auto, read-only) */}
+        <div
+          className="flex items-center gap-1.5 rounded-xl border border-green-500/30 bg-green-500/10 px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold text-green-400"
+          title={`On duty as ${staffTitle} — auto timer running`}
         >
-          <Power className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          {onDuty ? (
-            <span className="flex items-center gap-1 font-mono">
-              <Clock className="h-3 w-3" /> {fmtDuration(dutySeconds)}
-            </span>
-          ) : (
-            <span className="hidden sm:inline">Off Duty</span>
-          )}
-        </button>
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inset-0 rounded-full bg-green-400 opacity-75 animate-ping" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+          </span>
+          <Clock className="h-3 w-3 hidden sm:inline" />
+          <span className="font-mono">{fmtDuration(dutySeconds)}</span>
+        </div>
+
+        {/* Staff title + stars (compact) */}
+        {user && (
+          <div
+            className="hidden md:flex items-center gap-1.5 rounded-xl border border-white/[0.06] bg-white/[0.02] px-2.5 py-2 text-[11px] font-semibold text-[#D4AF37]"
+            title={`${user.name} — ${staffTitle}`}
+          >
+            <span className="uppercase tracking-wider">{staffTitle}</span>
+            {stars > 0 && (
+              <span className="flex items-center gap-0.5">
+                {[1, 2, 3].map((s) => (
+                  <Star
+                    key={s}
+                    className={`h-2.5 w-2.5 ${s <= stars ? 'fill-[#D4AF37] text-[#D4AF37]' : 'text-white/15'}`}
+                  />
+                ))}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Notifications */}
         <button

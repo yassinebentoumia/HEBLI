@@ -12,6 +12,9 @@ import {
   logout,
   createBackup,
   addAuditLog,
+  startSession,
+  endSession,
+  getActiveSessions,
 } from '@/utils/store';
 import { pullRemote, pushRemote, isOnline } from '@/utils/sync';
 
@@ -100,6 +103,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         user: staff.name,
         timestamp: new Date().toISOString(),
       });
+      // 🕒 Auto-start the on-duty timer
+      try {
+        // Reuse any active session that already exists for this staff
+        const existing = getActiveSessions().find((s) => s.staffId === staff.id);
+        const sessionId = existing
+          ? existing.id
+          : startSession({ id: staff.id, name: staff.name, role: staff.role });
+        localStorage.setItem('hebli_active_session_id', sessionId);
+      } catch { /* ignore */ }
       pushRemote();
     }
     return staff;
@@ -115,6 +127,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         timestamp: new Date().toISOString(),
       });
     }
+    // 🕒 Auto-end the on-duty timer
+    try {
+      const sid = localStorage.getItem('hebli_active_session_id');
+      if (sid) endSession(sid);
+      localStorage.removeItem('hebli_active_session_id');
+    } catch { /* ignore */ }
     logout();
     setUser(null);
     pushRemote();

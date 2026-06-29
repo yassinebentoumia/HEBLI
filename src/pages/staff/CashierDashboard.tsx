@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Coffee, DollarSign, Check, Receipt, User, Clock, TrendingUp, Timer, Search } from 'lucide-react';
+import { CreditCard, Coffee, DollarSign, Check, Receipt, User, Clock, TrendingUp, Timer, Search, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
@@ -12,6 +12,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addPayment, addAuditLog, getCashierStats, getPayments } from '@/utils/store';
+import { getStaffTitle } from '@/utils/roles';
 import type { Order, Payment } from '@/types';
 import { format } from 'date-fns';
 
@@ -122,7 +123,7 @@ export default function CashierDashboard() {
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
-                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Caisse</span>
+                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{user ? getStaffTitle(user) : 'Caisse'}</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
@@ -135,15 +136,15 @@ export default function CashierDashboard() {
       </header>
 
       <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-8">
-        {/* Stats - Daily & Weekly */}
-        <div className="mb-8 grid grid-cols-2 gap-4">
+        {/* Stats - Daily, Weekly, Facture button */}
+        <div className="mb-8 grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
           <GlassCard hover={false} className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <Clock className="h-3.5 w-3.5 text-white/30" />
               <div className="text-[10px] font-semibold tracking-[0.1em] text-white/30 uppercase">Aujourd'hui</div>
             </div>
-            <div className="text-2xl font-bold text-green-400">{stats.todayRevenue.toFixed(2)} DT</div>
-            <div className="mt-1 text-xs text-white/30">{stats.todayCount} paiements</div>
+            <div className="text-xl sm:text-2xl font-bold text-green-400">{stats.todayRevenue.toFixed(2)} DT</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/30">{stats.todayCount} paiements</div>
           </GlassCard>
 
           <GlassCard hover={false} className="text-center">
@@ -151,9 +152,23 @@ export default function CashierDashboard() {
               <TrendingUp className="h-3.5 w-3.5 text-white/30" />
               <div className="text-[10px] font-semibold tracking-[0.1em] text-white/30 uppercase">Cette semaine</div>
             </div>
-            <div className="text-2xl font-bold text-blue-400">{stats.weeklyRevenue.toFixed(2)} DT</div>
-            <div className="mt-1 text-xs text-white/30">{stats.weeklyCount} paiements</div>
+            <div className="text-xl sm:text-2xl font-bold text-blue-400">{stats.weeklyRevenue.toFixed(2)} DT</div>
+            <div className="mt-1 text-[10px] sm:text-xs text-white/30">{stats.weeklyCount} paiements</div>
           </GlassCard>
+
+          {/* Facture button — same size & shape as the stats cards */}
+          <button
+            onClick={() => navigate('/cashier/invoice')}
+            className="col-span-2 sm:col-span-1 group relative overflow-hidden rounded-2xl border border-[#D4AF37]/30 bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5 p-6 text-center transition-all hover:border-[#D4AF37]/60 hover:from-[#D4AF37]/20 active:scale-[0.98]"
+          >
+            <div className="absolute inset-0 bg-[#D4AF37]/0 group-hover:bg-[#D4AF37]/5 transition-colors" />
+            <div className="relative flex items-center justify-center gap-2 mb-2">
+              <FileText className="h-3.5 w-3.5 text-[#D4AF37]" />
+              <div className="text-[10px] font-semibold tracking-[0.1em] text-[#D4AF37] uppercase">Facture</div>
+            </div>
+            <div className="relative text-xl sm:text-2xl font-bold text-[#D4AF37]">+ Nouvelle</div>
+            <div className="relative mt-1 text-[10px] sm:text-xs text-white/40">Créer une facture fournisseur</div>
+          </button>
         </div>
 
         {/* Ready Orders Awaiting Payment */}

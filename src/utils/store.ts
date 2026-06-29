@@ -16,6 +16,8 @@ import type {
   Ticket,
   StaffSession,
   AppNotification,
+  Supplier,
+  Invoice,
 } from '@/types';
 import { schedulePush, SYNC_KEYS, recordDeletion } from './sync';
 
@@ -32,6 +34,8 @@ const KEYS = {
   tickets: 'hebli_tickets',
   sessions: 'hebli_staff_sessions',
   notifications: 'hebli_notifications',
+  suppliers: 'hebli_suppliers',
+  invoices: 'hebli_invoices',
   backups: 'hebli_backups',
   currentUser: 'hebli_current_user',
 };
@@ -496,6 +500,26 @@ export function getStaffDayDuration(staffId: string, dayKey: string): number {
   }, 0);
 }
 
+// Total worked seconds for a staff member in a given calendar month
+// monthKey: 'YYYY-MM'  (e.g. '2026-03')
+export function getStaffMonthDuration(staffId: string, monthKey: string): number {
+  const sessions = getSessions().filter(
+    (s) => s.staffId === staffId && s.dayKey && s.dayKey.startsWith(monthKey)
+  );
+  return sessions.reduce((sum, s) => {
+    if (s.durationSeconds) return sum + s.durationSeconds;
+    if (s.active) return sum + Math.floor((Date.now() - new Date(s.loginAt).getTime()) / 1000);
+    return sum;
+  }, 0);
+}
+
+// Sessions for a specific day (for the audit list)
+export function getStaffSessionsForDay(staffId: string, dayKey: string) {
+  return getSessions()
+    .filter((s) => s.staffId === staffId && s.dayKey === dayKey)
+    .sort((a, b) => new Date(a.loginAt).getTime() - new Date(b.loginAt).getTime());
+}
+
 // ============================================================
 // Notifications (owner → staff private messages, etc.)
 // ============================================================
@@ -727,6 +751,66 @@ export function createBackup(): void {
     backups.shift();
   }
   atomicWrite(KEYS.backups, backups);
+}
+
+// ============================================================
+// Suppliers (Owner manages)
+// ============================================================
+
+export function getSuppliers(): Supplier[] {
+  return safeRead<Supplier[]>(KEYS.suppliers, []);
+}
+
+export function addSupplier(s: Supplier): void {
+  const all = getSuppliers();
+  all.push(s);
+  atomicWrite(KEYS.suppliers, all);
+}
+
+export function updateSupplier(id: string, updates: Partial<Supplier>): void {
+  const all = getSuppliers();
+  const idx = all.findIndex((s) => s.id === id);
+  if (idx !== -1) {
+    all[idx] = { ...all[idx], ...updates };
+    atomicWrite(KEYS.suppliers, all);
+  }
+}
+
+export function deleteSupplier(id: string): void {
+  recordDeletion(KEYS.suppliers, id);
+  const all = getSuppliers().filter((s) => s.id !== id);
+  atomicWrite(KEYS.suppliers, all);
+}
+
+// ============================================================
+// Invoices (Cashier creates)
+// ============================================================
+
+export function getInvoices(): Invoice[] {
+  return safeRead<Invoice[]>(KEYS.invoices, []);
+}
+
+export function addInvoice(inv: Invoice): void {
+  const all = getInvoices();
+  all.push(inv);
+  atomicWrite(KEYS.invoices, all);
+}
+
+export function deleteInvoice(id: string): void {
+  recordDeletion(KEYS.invoices, id);
+  const all = getInvoices().filter((i) => i.id !== id);
+  atomicWrite(KEYS.invoices, all);
+}
+
+// Auto-generate next invoice number (FAC-000001, FAC-000002, ...)
+export function nextInvoiceNumber(): string {
+  const list = getInvoices();
+  let max = 0;
+  list.forEach((i) => {
+    const n = parseInt((i.number || '').replace(/\D/g, ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  });
+  return 'FAC-' + String(max + 1).padStart(6, '0');
 }
 
 // ============================================================

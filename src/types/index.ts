@@ -28,6 +28,8 @@ export interface Staff {
   pin: string;
   email?: string;
   active: boolean;
+  rating?: 1 | 2 | 3;            // 1–3 stars set by owner
+  salaryPerMinute?: number;      // DT per minute (used to compute paid time)
   createdAt: string;
 }
 
@@ -100,6 +102,47 @@ export interface AppNotification {
   type: 'order' | 'message' | 'info';
   read: boolean;
   createdAt: string;
+}
+
+// ============================================================
+// Invoices (Supplier purchases — Owner manages, Cashier creates)
+// ============================================================
+
+export interface SupplierProduct {
+  id: string;
+  name: string;
+  price: number;
+  unit?: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  phone?: string;
+  address?: string;
+  products: SupplierProduct[];
+  createdAt: string;
+}
+
+export interface InvoiceLine {
+  id: string;
+  productId: string;
+  productName: string;
+  unitPrice: number;
+  quantity: number;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;           // human-readable e.g. FAC-000123
+  supplierId: string;
+  supplierName: string;
+  cashierName: string;
+  lines: InvoiceLine[];
+  total: number;
+  notes?: string;
+  createdAt: string;
+  date: string;             // YYYY-MM-DD
 }
 
 export interface Payment {

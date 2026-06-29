@@ -31,6 +31,9 @@ import {
   CircleDot,
   Bell,
   Receipt,
+  Star,
+  Calendar,
+  Printer,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -63,9 +66,7 @@ import {
   deleteStaffMember,
   getOrders,
   getInventory,
-  updateInventoryItem,
-  getInventoryTransactions,
-  addInventoryTransaction,
+
   getAuditLogs,
   getCategories,
   addCategory,
@@ -76,33 +77,43 @@ import {
   updateTicket,
   getSessions,
   getStaffDayDuration,
+  getStaffMonthDuration,
   addNotification,
   getPayments,
   deleteOrder,
   deletePayment,
+  getSuppliers,
+  addSupplier,
+  updateSupplier,
+  deleteSupplier,
+  getInvoices,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
+import { getStaffTitle } from '@/utils/roles';
 import ChatPanel from '@/components/ChatPanel';
 import type {
   Product,
   Staff,
-  InventoryItem,
-  InventoryTransaction,
+
   AuditLog,
   Category,
   Ticket,
   Order,
   Payment,
+  Supplier,
+  SupplierProduct,
+  Invoice,
   StaffRole,
 } from '@/types';
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
   { key: 'orders', label: 'Orders', icon: Receipt },
+  { key: 'invoices', label: 'Invoices', icon: FileText },
   { key: 'products', label: 'Products', icon: Package },
   { key: 'categories', label: 'Categories', icon: Package },
   { key: 'staff', label: 'Staff', icon: Users },
@@ -133,6 +144,7 @@ export default function OwnerDashboard() {
       case 'staff': return <StaffTab />;
       case 'inventory': return <InventoryTab />;
       case 'orders': return <OrdersTab />;
+      case 'invoices': return <InvoicesTab />;
       case 'analytics': return <AnalyticsTab />;
       case 'chat': return <TeamChatTab />;
       case 'tickets': return <TicketsTab />;
@@ -766,8 +778,11 @@ function StaffTab() {
   const [notifText, setNotifText] = useState('');
   // Private chat drawer
   const [chatStaff, setChatStaff] = useState<Staff | null>(null);
+  // Salary draft per staff (DT per MINUTE)
+  const [salaryDrafts, setSalaryDrafts] = useState<Record<string, string>>({});
 
   const today = new Date().toISOString().split('T')[0];
+  const monthKey = today.slice(0, 7); // YYYY-MM
   const activeIds = getSessions().filter((s) => s.active).map((s) => s.staffId);
 
   useEffect(() => {
@@ -775,6 +790,25 @@ function StaffTab() {
     const int = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(int);
   }, []);
+
+  // Save the star rating (1–3)
+  const setRating = (id: string, name: string, rating: 1 | 2 | 3) => {
+    updateStaffMember(id, { rating });
+    addLog('Rating Updated', `${name} → ${rating}★`);
+    setStaff(getStaff());
+  };
+
+  // Save salary-per-minute (DT)
+  const saveSalary = (id: string, name: string) => {
+    const raw = salaryDrafts[id];
+    if (raw === undefined) return;
+    const num = parseFloat(raw);
+    if (isNaN(num) || num < 0) return;
+    updateStaffMember(id, { salaryPerMinute: num });
+    addLog('Salary Updated', `${name} → ${num.toFixed(4)} DT/min`);
+    setSalaryDrafts((d) => { const c = { ...d }; delete c[id]; return c; });
+    setStaff(getStaff());
+  };
 
   const sendNotif = () => {
     if (!notifTarget || !notifText.trim()) return;
@@ -843,65 +877,147 @@ function StaffTab() {
         </GoldButton>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {staff.map((s, i) => (
-          <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
-            <GlassCard>
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 text-lg font-bold text-[#D4AF37]">
-                    {s.name.charAt(0)}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
+        {staff.map((s, i) => {
+          const todaySec = getStaffDayDuration(s.id, today);
+          const monthSec = getStaffMonthDuration(s.id, monthKey);
+          const perMin = s.salaryPerMinute || 0;
+          const todayPay = (todaySec / 60) * perMin;
+          const monthPay = (monthSec / 60) * perMin;
+          const draft = salaryDrafts[s.id];
+          const stars = (s.rating ?? 0) as 0 | 1 | 2 | 3;
+          const title = getStaffTitle(s);
+
+          return (
+            <motion.div key={s.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+              <GlassCard>
+                {/* Header — name, role title, status */}
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#D4AF37]/10 text-lg font-bold text-[#D4AF37]">
+                      {s.name.charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{s.name}</h3>
+                      <p className="text-[11px] text-[#D4AF37]/80 font-semibold tracking-wider uppercase">{title}</p>
+                      <p className="text-[10px] text-white/30">{s.role} · PIN {s.pin}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold">{s.name}</h3>
-                    <p className="text-xs text-white/40">{s.role}</p>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full ${s.active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {s.active ? 'Active' : 'Suspended'}
+                    </span>
+                    {activeIds.includes(s.id) && (
+                      <span className="text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 flex items-center gap-1">
+                        <CircleDot className="h-2.5 w-2.5 animate-pulse" /> On Duty
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className={`text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full ${s.active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                    {s.active ? 'Active' : 'Suspended'}
-                  </span>
-                  {activeIds.includes(s.id) && (
-                    <span className="text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 flex items-center gap-1">
-                      <CircleDot className="h-2.5 w-2.5 animate-pulse" /> On Duty
-                    </span>
+
+                {/* Star Rating */}
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-white/30">Rating</span>
+                  <div className="flex gap-1">
+                    {[1, 2, 3].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setRating(s.id, s.name, n as 1 | 2 | 3)}
+                        className="hover:scale-110 transition-transform"
+                        title={`Set ${n} star${n > 1 ? 's' : ''}`}
+                      >
+                        <Star className={`h-4 w-4 ${n <= stars ? 'fill-[#D4AF37] text-[#D4AF37]' : 'text-white/15 hover:text-white/40'}`} />
+                      </button>
+                    ))}
+                  </div>
+                  {stars > 0 && (
+                    <span className="ml-1 text-[10px] text-white/40">→ {title}</span>
                   )}
                 </div>
-              </div>
-              <div className="mt-3 text-xs text-white/30 space-y-1">
-                <div>PIN: {s.pin}</div>
-                {s.email && <div>Email: {s.email}</div>}
-                <div className="flex items-center gap-1.5 text-amber-400/80">
-                  <Clock className="h-3 w-3" />
-                  Worked today: <span className="font-mono font-semibold">{fmtDur(getStaffDayDuration(s.id, today))}</span>
+
+                {/* Work time */}
+                <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-white/[0.04] bg-white/[0.02] p-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/30 flex items-center gap-1">
+                      <Clock className="h-2.5 w-2.5" /> Today
+                    </div>
+                    <div className="mt-0.5 font-mono text-sm font-semibold text-amber-400">{fmtDur(todaySec)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/30 flex items-center gap-1">
+                      <Calendar className="h-2.5 w-2.5" /> This Month
+                    </div>
+                    <div className="mt-0.5 font-mono text-sm font-semibold text-blue-400">{fmtDur(monthSec)}</div>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button onClick={() => setNotifTarget(s)} className="rounded-lg border border-[#D4AF37]/20 bg-[#D4AF37]/5 py-1.5 text-xs text-[#D4AF37] hover:bg-[#D4AF37]/10 transition-colors flex items-center justify-center gap-1">
-                  <Bell className="h-3 w-3" /> Notify
-                </button>
-                <button onClick={() => setChatStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
-                  <MessageCircle className="h-3 w-3" /> Chat
-                </button>
-              </div>
-              <div className="mt-2 flex gap-2">
-                <button onClick={() => openEdit(s)} className="flex-1 rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/50 hover:text-white hover:border-white/20 transition-colors">
-                  <Edit className="h-3 w-3 inline mr-1" /> Edit
-                </button>
-                <button onClick={() => toggleActive(s.id, s.name, s.active)}
-                  className={`flex-1 rounded-lg border py-1.5 text-xs transition-colors ${s.active ? 'border-red-500/20 text-red-400 hover:bg-red-500/10' : 'border-green-500/20 text-green-400 hover:bg-green-500/10'}`}
-                >
-                  {s.active ? 'Suspend' : 'Activate'}
-                </button>
-                <button onClick={() => handleDelete(s.id, s.name)}
-                  className="rounded-lg border border-white/[0.08] px-2 py-1.5 text-xs text-white/30 hover:text-red-400 hover:border-red-500/20 transition-colors"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              </div>
-            </GlassCard>
-          </motion.div>
-        ))}
+
+                {/* Salary input + computed pay */}
+                <div className="mt-3 rounded-xl border border-[#D4AF37]/15 bg-[#D4AF37]/[0.04] p-3 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-[#D4AF37]/80 flex items-center gap-1">
+                    <DollarSign className="h-2.5 w-2.5" /> Salary per minute (DT)
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      placeholder="e.g. 0.05"
+                      value={draft !== undefined ? draft : (perMin > 0 ? String(perMin) : '')}
+                      onChange={(e) => setSalaryDrafts((d) => ({ ...d, [s.id]: e.target.value }))}
+                      className="flex-1 rounded-lg border border-white/[0.08] bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/40"
+                    />
+                    <button
+                      onClick={() => saveSalary(s.id, s.name)}
+                      disabled={draft === undefined}
+                      className="rounded-lg bg-[#D4AF37] px-3 py-1.5 text-[11px] font-bold text-black hover:bg-amber-400 disabled:opacity-30 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                  {perMin > 0 && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-white/30">Pay today</div>
+                        <div className="font-mono text-sm font-bold text-green-400">{todayPay.toFixed(2)} DT</div>
+                      </div>
+                      <div>
+                        <div className="text-[9px] uppercase tracking-wider text-white/30">Pay this month</div>
+                        <div className="font-mono text-sm font-bold text-green-400">{monthPay.toFixed(2)} DT</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {s.email && <div className="mt-2 text-[10px] text-white/30">{s.email}</div>}
+
+                {/* Actions */}
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button onClick={() => setNotifTarget(s)} className="rounded-lg border border-[#D4AF37]/20 bg-[#D4AF37]/5 py-1.5 text-xs text-[#D4AF37] hover:bg-[#D4AF37]/10 transition-colors flex items-center justify-center gap-1">
+                    <Bell className="h-3 w-3" /> Notify
+                  </button>
+                  <button onClick={() => setChatStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
+                    <MessageCircle className="h-3 w-3" /> Chat
+                  </button>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button onClick={() => openEdit(s)} className="flex-1 rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/50 hover:text-white hover:border-white/20 transition-colors">
+                    <Edit className="h-3 w-3 inline mr-1" /> Edit
+                  </button>
+                  <button onClick={() => toggleActive(s.id, s.name, s.active)}
+                    className={`flex-1 rounded-lg border py-1.5 text-xs transition-colors ${s.active ? 'border-red-500/20 text-red-400 hover:bg-red-500/10' : 'border-green-500/20 text-green-400 hover:bg-green-500/10'}`}
+                  >
+                    {s.active ? 'Suspend' : 'Activate'}
+                  </button>
+                  <button onClick={() => handleDelete(s.id, s.name)}
+                    className="rounded-lg border border-white/[0.08] px-2 py-1.5 text-xs text-white/30 hover:text-red-400 hover:border-red-500/20 transition-colors"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              </GlassCard>
+            </motion.div>
+          );
+        })}
       </div>
 
       <AnimatePresence>
@@ -1034,205 +1150,376 @@ function StaffTab() {
 // Inventory Tab
 // ============================================================
 
+// ============================================================
+// New Inventory: derived from invoices.
+// Each supplier-product is grouped. The card shows total qty
+// (e.g. "Bon 1000 kg"). Click it to see all individual purchase
+// batches (Bon 1, Bon 2, ...) with date, qty, price, supplier.
+// ============================================================
+
+interface InventoryGroup {
+  key: string;            // groupBy key (productName lowercased)
+  displayName: string;    // e.g. "Lait"
+  totalQty: number;       // sum across all units (using base unit when possible)
+  baseUnit: string;       // common unit string
+  // Variants are sub-groups keyed by full product name (e.g. "Lait 1L" vs "Lait 2L")
+  variants: Array<{
+    key: string;          // full normalized name
+    name: string;         // "Lait 1L"
+    qty: number;          // total qty of this variant
+    unit: string;         // unit
+    pieces?: number;      // number of pieces if quantifiable (sum of all line quantities)
+    avgPrice: number;     // average unit price
+    suppliers: string[];  // distinct supplier names
+    lines: Array<{
+      id: string;
+      invoiceNumber: string;
+      invoiceId: string;
+      supplierName: string;
+      date: string;
+      qty: number;
+      unitPrice: number;
+      productName: string;
+    }>;
+  }>;
+  totalSpent: number;
+}
+
+// "Lait 1L" → base name "Lait", variant "1L". Falls back to whole name.
+function splitProductName(full: string): { base: string; variant: string } {
+  // Try to detect a size suffix like "1L", "2 L", "500ml", "1kg", "12 pcs", etc.
+  const m = full.match(/^(.*?)\s*([\d.,]+\s*(?:kg|g|l|ml|cl|pcs?|pcs|pack|x))$/i);
+  if (m) {
+    return { base: m[1].trim() || full, variant: m[2].trim() };
+  }
+  // Fallback: keep first word as base, rest as variant
+  const parts = full.trim().split(/\s+/);
+  if (parts.length > 1) {
+    return { base: parts[0], variant: parts.slice(1).join(' ') };
+  }
+  return { base: full, variant: '' };
+}
+
+function buildInventoryFromInvoices(invoices: Invoice[]): InventoryGroup[] {
+  const variantMap = new Map<string, InventoryGroup['variants'][number]>();
+  const groupMap = new Map<string, InventoryGroup>();
+
+  invoices.forEach((inv) => {
+    inv.lines.forEach((line) => {
+      // The product name in invoice lines often contains "/unit" suffix from supplier setup.
+      // Strip the trailing "/ unit" tail to recover the base product name.
+      const cleanName = line.productName.replace(/\s*\/\s*.+$/, '').trim();
+      const { base, variant } = splitProductName(cleanName);
+      const baseKey = base.toLowerCase();
+      const variantKey = cleanName.toLowerCase();
+      const unit = (line.productName.match(/\/\s*(.+)$/) || [, ''])[1].trim();
+
+      // Variant
+      let v = variantMap.get(variantKey);
+      if (!v) {
+        v = {
+          key: variantKey,
+          name: variant ? `${base} ${variant}` : base,
+          qty: 0,
+          unit,
+          avgPrice: 0,
+          suppliers: [],
+          lines: [],
+        };
+        variantMap.set(variantKey, v);
+      }
+      v.qty += line.quantity;
+      v.lines.push({
+        id: line.id,
+        invoiceId: inv.id,
+        invoiceNumber: inv.number,
+        supplierName: inv.supplierName,
+        date: inv.date,
+        qty: line.quantity,
+        unitPrice: line.unitPrice,
+        productName: cleanName,
+      });
+      if (!v.suppliers.includes(inv.supplierName)) v.suppliers.push(inv.supplierName);
+
+      // Group (base product)
+      let g = groupMap.get(baseKey);
+      if (!g) {
+        g = {
+          key: baseKey,
+          displayName: base,
+          totalQty: 0,
+          baseUnit: unit,
+          variants: [],
+          totalSpent: 0,
+        };
+        groupMap.set(baseKey, g);
+      }
+      g.totalQty += line.quantity;
+      g.totalSpent += line.quantity * line.unitPrice;
+      if (!g.baseUnit && unit) g.baseUnit = unit;
+    });
+  });
+
+  // Compute averages + attach variants to groups
+  variantMap.forEach((v) => {
+    const totalCost = v.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
+    v.avgPrice = v.qty > 0 ? totalCost / v.qty : 0;
+    v.lines.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const { base } = splitProductName(v.lines[0]?.productName || v.name);
+    const g = groupMap.get(base.toLowerCase());
+    if (g) g.variants.push(v);
+  });
+
+  return Array.from(groupMap.values()).sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
 function InventoryTab() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
-  const [showPurchase, setShowPurchase] = useState(false);
-  const [showConsume, setShowConsume] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [qty, setQty] = useState('');
-  const [cost, setCost] = useState('');
-  const [supplier, setSupplier] = useState('');
-  const { addLog } = useApp();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [search, setSearch] = useState('');
+  const [openGroup, setOpenGroup] = useState<InventoryGroup | null>(null);
+  const [openVariant, setOpenVariant] = useState<InventoryGroup['variants'][number] | null>(null);
+
+  const load = () => setInvoices(getInvoices());
 
   useEffect(() => {
-    setInventory(getInventory());
-    setTransactions(getInventoryTransactions());
+    load();
+    const int = setInterval(load, 3000);
+    return () => clearInterval(int);
   }, []);
 
-  const handlePurchase = () => {
-    if (!selectedItem || !qty) return;
-    const qtyNum = parseFloat(qty);
-    updateInventoryItem(selectedItem.id, { quantity: selectedItem.quantity + qtyNum });
-    addInventoryTransaction({
-      id: 'tx-' + Date.now(),
-      itemId: selectedItem.id,
-      itemName: selectedItem.name,
-      type: 'purchase',
-      quantity: qtyNum,
-      cost: cost ? parseFloat(cost) : undefined,
-      supplier: supplier || undefined,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-    });
-    addLog('Inventory Purchase', `Purchased ${qtyNum} ${selectedItem.unit} of ${selectedItem.name}`);
-    setInventory(getInventory());
-    setTransactions(getInventoryTransactions());
-    setShowPurchase(false);
-    setQty(''); setCost(''); setSupplier('');
-  };
+  const groups = useMemo(() => buildInventoryFromInvoices(invoices), [invoices]);
 
-  const handleConsume = () => {
-    if (!selectedItem || !qty) return;
-    const qtyNum = parseFloat(qty);
-    updateInventoryItem(selectedItem.id, { quantity: Math.max(0, selectedItem.quantity - qtyNum) });
-    addInventoryTransaction({
-      id: 'tx-' + Date.now(),
-      itemId: selectedItem.id,
-      itemName: selectedItem.name,
-      type: 'consumption',
-      quantity: qtyNum,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: new Date().toISOString(),
-    });
-    addLog('Inventory Consumption', `Consumed ${qtyNum} ${selectedItem.unit} of ${selectedItem.name}`);
-    setInventory(getInventory());
-    setTransactions(getInventoryTransactions());
-    setShowConsume(false);
-    setQty('');
-  };
+  const filteredGroups = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return groups;
+    return groups.filter(
+      (g) => g.displayName.toLowerCase().includes(q) || g.variants.some((v) => v.name.toLowerCase().includes(q))
+    );
+  }, [groups, search]);
 
-  const getStockLevel = (item: InventoryItem) => {
-    if (item.quantity <= item.criticalStock) return 'critical';
-    if (item.quantity <= item.minStock) return 'low';
-    return 'good';
-  };
+  const totalSKUs = groups.reduce((s, g) => s + g.variants.length, 0);
+  const totalSpent = groups.reduce((s, g) => s + g.totalSpent, 0);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {inventory.map((item, i) => {
-          const level = getStockLevel(item);
-          return (
-            <motion.div key={item.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
-              <GlassCard>
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-[10px] tracking-wider text-[#D4AF37] uppercase">{item.type}</span>
-                  <span className={`text-[10px] tracking-wider uppercase px-2 py-0.5 rounded-full ${
-                    level === 'critical' ? 'bg-red-500/10 text-red-400' :
-                    level === 'low' ? 'bg-amber-500/10 text-amber-400' :
-                    'bg-green-500/10 text-green-400'
-                  }`}>
-                    {level}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-sm">{item.name}</h3>
-                <div className="mt-2 text-2xl font-bold">
-                  <span className={level === 'critical' ? 'text-red-400' : level === 'low' ? 'text-amber-400' : 'text-white'}>
-                    {item.quantity}
-                  </span>
-                  <span className="text-sm text-white/30 ml-1">{item.unit}</span>
-                </div>
-                <div className="mt-1 text-xs text-white/20">
-                  Min: {item.minStock} {item.unit} | Critical: {item.criticalStock} {item.unit}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    onClick={() => { setSelectedItem(item); setShowPurchase(true); }}
-                    className="flex-1 rounded-lg bg-green-500/10 py-1.5 text-xs text-green-400 hover:bg-green-500/20 transition-colors"
-                  >
-                    + Purchase
-                  </button>
-                  <button
-                    onClick={() => { setSelectedItem(item); setShowConsume(true); }}
-                    className="flex-1 rounded-lg bg-amber-500/10 py-1.5 text-xs text-amber-400 hover:bg-amber-500/20 transition-colors"
-                  >
-                    - Consume
-                  </button>
-                </div>
-              </GlassCard>
-            </motion.div>
-          );
-        })}
+      {/* Stats */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Distinct Products</div>
+          <div className="mt-1 text-2xl font-bold text-[#D4AF37]">{groups.length}</div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Total Variants (SKUs)</div>
+          <div className="mt-1 text-2xl font-bold text-blue-400">{totalSKUs}</div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Total Spent on Stock</div>
+          <div className="mt-1 text-2xl font-bold text-amber-400">{totalSpent.toFixed(2)} DT</div>
+        </GlassCard>
       </div>
 
-      {/* Recent Transactions */}
-      <GlassCard hover={false}>
-        <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4">Recent Transactions</h3>
-        {transactions.length > 0 ? (
-          <div className="space-y-2">
-            {transactions.slice(-10).reverse().map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between rounded-xl border border-white/[0.04] p-3">
-                <div className="flex items-center gap-3">
-                  <span className={`text-lg ${tx.type === 'purchase' ? 'text-green-400' : 'text-amber-400'}`}>
-                    {tx.type === 'purchase' ? '📥' : '📤'}
+      {/* Search + Info */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search inventory..."
+            className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-2.5 pl-11 pr-4 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#D4AF37]/50"
+          />
+        </div>
+        <div className="text-[11px] text-white/30">Inventory is auto-generated from invoices.</div>
+      </div>
+
+      {/* Group cards */}
+      {filteredGroups.length === 0 ? (
+        <div className="py-16 text-center text-white/25">
+          <PackageOpen className="h-10 w-10 mx-auto opacity-30 mb-2" />
+          {invoices.length === 0 ? (
+            <>
+              <p className="text-sm">No inventory yet.</p>
+              <p className="mt-1 text-[11px] text-white/15">Cashiers create invoices in their dashboard; items will appear here automatically.</p>
+            </>
+          ) : (
+            <p className="text-sm">No products match your search.</p>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filteredGroups.map((g) => (
+            <button
+              key={g.key}
+              onClick={() => setOpenGroup(g)}
+              className="text-left group"
+            >
+              <GlassCard className="h-full">
+                <div className="flex items-start justify-between mb-2">
+                  <span className="text-[10px] tracking-wider text-[#D4AF37] uppercase">
+                    {g.variants.length} variant{g.variants.length !== 1 ? 's' : ''}
                   </span>
-                  <div>
-                    <div className="text-sm font-medium">{tx.itemName}</div>
-                    <div className="text-xs text-white/30">
-                      {tx.type === 'purchase' ? 'Purchased' : 'Consumed'} {tx.quantity} {tx.type === 'purchase' && tx.cost ? `• ${tx.cost.toFixed(2)} DT` : ''}
-                      {tx.supplier ? ` • ${tx.supplier}` : ''}
-                    </div>
-                  </div>
+                  <span className="text-[10px] text-white/30">{g.totalSpent.toFixed(2)} DT</span>
                 </div>
-                <span className="text-xs text-white/30">{tx.date}</span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-8 text-center text-white/20 text-sm">No transactions yet</div>
-        )}
-      </GlassCard>
+                <h3 className="text-lg font-bold capitalize">{g.displayName}</h3>
+                <div className="mt-2 text-3xl font-black text-white">
+                  {g.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span className="text-sm text-white/30 ml-1.5">{g.baseUnit || ''}</span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {g.variants.slice(0, 3).map((v) => (
+                    <span key={v.key} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                      {v.name}
+                    </span>
+                  ))}
+                  {g.variants.length > 3 && (
+                    <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/40">
+                      +{g.variants.length - 3}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 text-[10px] text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors flex items-center gap-1">
+                  Tap for details →
+                </div>
+              </GlassCard>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Purchase Modal */}
-      <AnimatePresence>
-        {showPurchase && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            onClick={() => setShowPurchase(false)}
-          >
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#111] p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-bold mb-4">Purchase: {selectedItem?.name}</h3>
-              <div className="space-y-3">
-                <input type="number" placeholder="Quantity" value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
-                />
-                <input type="number" placeholder="Total Cost (DT)" value={cost}
-                  onChange={(e) => setCost(e.target.value)} step="0.01"
-                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
-                />
-                <input type="text" placeholder="Supplier (optional)" value={supplier}
-                  onChange={(e) => setSupplier(e.target.value)}
-                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
-                />
-              </div>
-              <div className="mt-6 flex gap-3">
-                <GoldButton variant="outline" className="flex-1" onClick={() => setShowPurchase(false)}>Cancel</GoldButton>
-                <GoldButton className="flex-1" onClick={handlePurchase}>Confirm</GoldButton>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Consume Modal */}
-      <AnimatePresence>
-        {showConsume && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            onClick={() => setShowConsume(false)}
-          >
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
-              className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#111] p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-bold mb-4">Consume: {selectedItem?.name}</h3>
-              <input type="number" placeholder={`Quantity (max ${selectedItem?.quantity})`} value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
+      {/* ============== Group Detail Drawer (Variants list) ============== */}
+      {createPortal(
+        <AnimatePresence>
+          {openGroup && !openVariant && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm"
+                onClick={() => setOpenGroup(null)}
               />
-              <div className="mt-6 flex gap-3">
-                <GoldButton variant="outline" className="flex-1" onClick={() => setShowConsume(false)}>Cancel</GoldButton>
-                <GoldButton className="flex-1" onClick={handleConsume}>Confirm</GoldButton>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <motion.div
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+              >
+                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A]">
+                  <div>
+                    <h2 className="text-xl font-bold capitalize">{openGroup.displayName}</h2>
+                    <p className="text-xs text-white/40 mt-0.5">
+                      <span className="font-mono text-[#D4AF37]">{openGroup.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {openGroup.baseUnit}</span> total ·
+                      {' '}{openGroup.variants.length} variant{openGroup.variants.length !== 1 ? 's' : ''} ·
+                      {' '}{openGroup.totalSpent.toFixed(2)} DT spent
+                    </p>
+                  </div>
+                  <button onClick={() => setOpenGroup(null)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                  <div className="text-[10px] uppercase tracking-wider text-white/30">Variants — click for purchase batches</div>
+                  {openGroup.variants.map((v) => (
+                    <button
+                      key={v.key}
+                      onClick={() => setOpenVariant(v)}
+                      className="w-full text-left rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:border-[#D4AF37]/30 hover:bg-white/[0.04] transition-colors"
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <div className="font-semibold capitalize">{v.name}</div>
+                          <div className="text-[11px] text-white/40 mt-0.5">
+                            {v.lines.length} purchase{v.lines.length !== 1 ? 's' : ''} ·
+                            {' '}avg {v.avgPrice.toFixed(2)} DT{v.unit ? `/${v.unit}` : ''}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xl font-bold text-[#D4AF37]">
+                            {v.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="text-[10px] text-white/30">{v.unit || 'units'}</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {v.suppliers.slice(0, 3).map((s) => (
+                          <span key={s} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">📦 {s}</span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* ============== Variant Detail Drawer (Purchase batches) ============== */}
+      {createPortal(
+        <AnimatePresence>
+          {openVariant && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm"
+                onClick={() => setOpenVariant(null)}
+              />
+              <motion.div
+                initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+              >
+                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A]">
+                  <div>
+                    <button onClick={() => setOpenVariant(null)} className="text-[11px] text-white/40 hover:text-white mb-1 flex items-center gap-1">
+                      ← Back to {openGroup?.displayName}
+                    </button>
+                    <h2 className="text-xl font-bold capitalize">{openVariant.name}</h2>
+                    <p className="text-xs text-white/40 mt-0.5">
+                      <span className="font-mono text-[#D4AF37]">{openVariant.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {openVariant.unit}</span> total
+                      · across {openVariant.lines.length} purchase{openVariant.lines.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  <button onClick={() => { setOpenVariant(null); setOpenGroup(null); }} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 space-y-2">
+                  <div className="text-[10px] uppercase tracking-wider text-white/30 mb-1">Purchase Batches (Bon)</div>
+                  {openVariant.lines.map((l, i) => (
+                    <div
+                      key={l.id}
+                      className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-bold text-[#D4AF37] uppercase tracking-wider">
+                              Bon {openVariant.lines.length - i}
+                            </span>
+                            <span className="text-[11px] font-mono text-white/40">{l.invoiceNumber}</span>
+                          </div>
+                          <div className="mt-1 text-xs text-white/50">📦 {l.supplierName}</div>
+                          <div className="text-[10px] text-white/30">{new Date(l.date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' })}</div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="text-base font-bold text-white">
+                            {l.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            <span className="text-[10px] text-white/40 ml-1">{openVariant.unit}</span>
+                          </div>
+                          <div className="text-[10px] text-white/40">@ {l.unitPrice.toFixed(2)} DT</div>
+                          <div className="text-[11px] font-semibold text-[#D4AF37]">{(l.qty * l.unitPrice).toFixed(2)} DT</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1995,6 +2282,361 @@ function OrdersTab() {
                     className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-400"
                   >
                     Delete
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Invoices Tab (Owner — manages Suppliers + sees all Invoices)
+// ============================================================
+
+function InvoicesTab() {
+  const navigate = useNavigate();
+  const { addLog } = useApp();
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [view, setView] = useState<'suppliers' | 'history'>('suppliers');
+
+  // Supplier form modal
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [editSupplier, setEditSupplier] = useState<Supplier | null>(null);
+  const [sForm, setSForm] = useState<{ name: string; phone: string; address: string; products: SupplierProduct[] }>(
+    { name: '', phone: '', address: '', products: [] }
+  );
+  const [newProd, setNewProd] = useState({ name: '', price: '', unit: '' });
+
+  const load = () => {
+    setSuppliers(getSuppliers().sort((a, b) => a.name.localeCompare(b.name)));
+    setInvoices(getInvoices().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+  };
+
+  useEffect(() => {
+    load();
+    const int = setInterval(load, 3000);
+    return () => clearInterval(int);
+  }, []);
+
+  const openNewSupplier = () => {
+    setEditSupplier(null);
+    setSForm({ name: '', phone: '', address: '', products: [] });
+    setNewProd({ name: '', price: '', unit: '' });
+    setShowSupplierForm(true);
+  };
+
+  const openEditSupplier = (s: Supplier) => {
+    setEditSupplier(s);
+    setSForm({ name: s.name, phone: s.phone || '', address: s.address || '', products: [...s.products] });
+    setNewProd({ name: '', price: '', unit: '' });
+    setShowSupplierForm(true);
+  };
+
+  const addProductLine = () => {
+    if (!newProd.name.trim() || !newProd.price) return;
+    const price = parseFloat(newProd.price);
+    if (isNaN(price) || price < 0) return;
+    setSForm((f) => ({
+      ...f,
+      products: [
+        ...f.products,
+        {
+          id: 'sp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          name: newProd.name.trim(),
+          price,
+          unit: newProd.unit.trim() || undefined,
+        },
+      ],
+    }));
+    setNewProd({ name: '', price: '', unit: '' });
+  };
+
+  const removeProductLine = (pid: string) => {
+    setSForm((f) => ({ ...f, products: f.products.filter((p) => p.id !== pid) }));
+  };
+
+  const saveSupplier = () => {
+    if (!sForm.name.trim()) return;
+    if (editSupplier) {
+      updateSupplier(editSupplier.id, {
+        name: sForm.name.trim(),
+        phone: sForm.phone.trim() || undefined,
+        address: sForm.address.trim() || undefined,
+        products: sForm.products,
+      });
+      addLog('Supplier Updated', `${sForm.name} (${sForm.products.length} products)`);
+    } else {
+      addSupplier({
+        id: 'sup-' + Date.now(),
+        name: sForm.name.trim(),
+        phone: sForm.phone.trim() || undefined,
+        address: sForm.address.trim() || undefined,
+        products: sForm.products,
+        createdAt: new Date().toISOString(),
+      });
+      addLog('Supplier Added', `${sForm.name} (${sForm.products.length} products)`);
+    }
+    setShowSupplierForm(false);
+    load();
+  };
+
+  const removeSupplier = (s: Supplier) => {
+    if (!confirm(`Delete supplier "${s.name}"? This cannot be undone.`)) return;
+    deleteSupplier(s.id);
+    addLog('Supplier Deleted', s.name);
+    load();
+  };
+
+  const totalSpent = invoices.reduce((sum, i) => sum + i.total, 0);
+  const today = new Date().toISOString().split('T')[0];
+  const monthKey = today.slice(0, 7);
+  const monthSpent = invoices.filter((i) => i.date.startsWith(monthKey)).reduce((s, i) => s + i.total, 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Stats */}
+      <div className="grid sm:grid-cols-3 gap-3">
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Suppliers</div>
+          <div className="mt-1 text-2xl font-bold text-[#D4AF37]">{suppliers.length}</div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Invoices this month</div>
+          <div className="mt-1 text-2xl font-bold text-blue-400">
+            {invoices.filter((i) => i.date.startsWith(monthKey)).length}
+            <span className="text-sm font-normal text-white/40 ml-2">({monthSpent.toFixed(2)} DT)</span>
+          </div>
+        </GlassCard>
+        <GlassCard hover={false}>
+          <div className="text-xs text-white/40 uppercase tracking-wider">Total spent (all-time)</div>
+          <div className="mt-1 text-2xl font-bold text-amber-400">{totalSpent.toFixed(2)} DT</div>
+        </GlassCard>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-2 border-b border-white/[0.06] pb-3">
+        <button
+          onClick={() => setView('suppliers')}
+          className={`rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+            view === 'suppliers' ? 'bg-[#D4AF37] text-black' : 'border border-white/[0.08] text-white/50 hover:bg-white/5'
+          }`}
+        >
+          Suppliers
+        </button>
+        <button
+          onClick={() => setView('history')}
+          className={`rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors ${
+            view === 'history' ? 'bg-[#D4AF37] text-black' : 'border border-white/[0.08] text-white/50 hover:bg-white/5'
+          }`}
+        >
+          Invoice History ({invoices.length})
+        </button>
+      </div>
+
+      {view === 'suppliers' ? (
+        <>
+          <div className="flex justify-end">
+            <GoldButton onClick={openNewSupplier}>
+              <Plus className="h-4 w-4" /> Add Supplier
+            </GoldButton>
+          </div>
+
+          {suppliers.length === 0 ? (
+            <div className="py-16 text-center text-white/25">
+              <FileText className="h-10 w-10 mx-auto opacity-30 mb-2" />
+              <p className="text-sm">No suppliers yet — add your first one.</p>
+              <p className="mt-1 text-[11px] text-white/15">Cashiers will pick from this list when creating invoices.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {suppliers.map((s) => (
+                <GlassCard key={s.id}>
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold truncate">{s.name}</h3>
+                      {s.phone && <p className="text-[11px] text-white/40">📞 {s.phone}</p>}
+                      {s.address && <p className="text-[11px] text-white/40 truncate">📍 {s.address}</p>}
+                    </div>
+                    <span className="rounded-full bg-[#D4AF37]/10 px-2 py-0.5 text-[10px] font-semibold text-[#D4AF37]">
+                      {s.products.length} item{s.products.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {s.products.length > 0 && (
+                    <div className="mt-3 max-h-32 overflow-y-auto space-y-1 pr-1">
+                      {s.products.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between text-xs">
+                          <span className="text-white/60 truncate">{p.name}{p.unit ? ` / ${p.unit}` : ''}</span>
+                          <span className="font-semibold text-[#D4AF37]">{p.price.toFixed(2)} DT</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-4 flex gap-2">
+                    <button onClick={() => openEditSupplier(s)} className="flex-1 rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/50 hover:text-white hover:border-white/20 transition-colors">
+                      <Edit className="h-3 w-3 inline mr-1" /> Edit
+                    </button>
+                    <button onClick={() => removeSupplier(s)} className="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5 text-xs text-red-400 hover:bg-red-500/15 transition-colors">
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </GlassCard>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        /* INVOICE HISTORY */
+        <div className="space-y-2">
+          {invoices.length === 0 ? (
+            <div className="py-16 text-center text-white/25">
+              <Receipt className="h-10 w-10 mx-auto opacity-30 mb-2" />
+              <p className="text-sm">No invoices created yet.</p>
+              <p className="mt-1 text-[11px] text-white/15">Cashiers can create invoices from the Caisse dashboard.</p>
+            </div>
+          ) : (
+            invoices.map((inv) => (
+              <GlassCard key={inv.id} hover={false} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-[#D4AF37]">{inv.number}</span>
+                      <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold text-white/50">{inv.supplierName}</span>
+                    </div>
+                    <div className="mt-1 text-xs text-white/40">
+                      {new Date(inv.createdAt).toLocaleString()} · Cashier: {inv.cashierName}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {inv.lines.slice(0, 4).map((l) => (
+                        <span key={l.id} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/50">
+                          {l.quantity}× {l.productName}
+                        </span>
+                      ))}
+                      {inv.lines.length > 4 && (
+                        <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/40">+{inv.lines.length - 4}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right flex flex-col items-end gap-1.5">
+                    <div className="text-base font-bold text-[#D4AF37]">{inv.total.toFixed(2)} DT</div>
+                    <div className="text-[10px] text-white/30">{inv.lines.length} line{inv.lines.length !== 1 ? 's' : ''}</div>
+                    <button
+                      onClick={() => navigate(`/cashier/invoice?id=${inv.id}`)}
+                      className="mt-1 rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 py-1 text-[10px] font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors flex items-center gap-1"
+                      title="Open & print this invoice"
+                    >
+                      <Printer className="h-3 w-3" /> Open / Print
+                    </button>
+                  </div>
+                </div>
+              </GlassCard>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* Supplier Form Modal */}
+      {createPortal(
+        <AnimatePresence>
+          {showSupplierForm && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto"
+              onClick={() => setShowSupplierForm(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="w-full max-w-2xl rounded-2xl border border-white/[0.08] bg-[#111] my-8"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+                  <h3 className="text-lg font-bold flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-[#D4AF37]" />
+                    {editSupplier ? 'Edit Supplier' : 'New Supplier'}
+                  </h3>
+                  <button onClick={() => setShowSupplierForm(false)} className="rounded-lg p-1 text-white/30 hover:text-white"><X className="h-5 w-5" /></button>
+                </div>
+
+                <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                  <div className="grid sm:grid-cols-3 gap-3">
+                    <input type="text" placeholder="Supplier name *" value={sForm.name}
+                      onChange={(e) => setSForm({ ...sForm, name: e.target.value })}
+                      className="sm:col-span-3 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
+                    />
+                    <input type="text" placeholder="Phone" value={sForm.phone}
+                      onChange={(e) => setSForm({ ...sForm, phone: e.target.value })}
+                      className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
+                    />
+                    <input type="text" placeholder="Address (optional)" value={sForm.address}
+                      onChange={(e) => setSForm({ ...sForm, address: e.target.value })}
+                      className="sm:col-span-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                    <div className="text-xs font-semibold tracking-wider uppercase text-white/40 mb-3">
+                      Products ({sForm.products.length})
+                    </div>
+
+                    <div className="grid grid-cols-12 gap-2 mb-3">
+                      <input
+                        type="text" placeholder="Product name"
+                        value={newProd.name}
+                        onChange={(e) => setNewProd({ ...newProd, name: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Enter' && addProductLine()}
+                        className="col-span-6 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/20 outline-none"
+                      />
+                      <input
+                        type="number" step="0.01" min="0" placeholder="Price"
+                        value={newProd.price}
+                        onChange={(e) => setNewProd({ ...newProd, price: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Enter' && addProductLine()}
+                        className="col-span-3 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/20 outline-none"
+                      />
+                      <input
+                        type="text" placeholder="Unit (kg, L...)"
+                        value={newProd.unit}
+                        onChange={(e) => setNewProd({ ...newProd, unit: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Enter' && addProductLine()}
+                        className="col-span-2 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white placeholder:text-white/20 outline-none"
+                      />
+                      <button
+                        onClick={addProductLine}
+                        className="col-span-1 rounded-lg bg-[#D4AF37] text-black font-bold hover:bg-amber-400 transition-colors flex items-center justify-center"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {sForm.products.length === 0 ? (
+                      <div className="text-center text-xs text-white/25 py-4">
+                        No products yet. Add at least one.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {sForm.products.map((p) => (
+                          <div key={p.id} className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
+                            <span className="flex-1 text-sm truncate">{p.name}{p.unit ? ` / ${p.unit}` : ''}</span>
+                            <span className="text-sm font-semibold text-[#D4AF37]">{p.price.toFixed(2)} DT</span>
+                            <button onClick={() => removeProductLine(p.id)} className="rounded p-1 text-white/30 hover:text-red-400">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 p-5 border-t border-white/[0.06]">
+                  <button onClick={() => setShowSupplierForm(false)} className="flex-1 rounded-xl border border-white/[0.08] py-3 text-sm font-medium text-white/70 hover:bg-white/5">Cancel</button>
+                  <button onClick={saveSupplier} disabled={!sForm.name.trim()} className="flex-1 rounded-xl bg-[#D4AF37] py-3 text-sm font-bold text-black hover:bg-amber-400 disabled:opacity-30">
+                    {editSupplier ? 'Update Supplier' : 'Create Supplier'}
                   </button>
                 </div>
               </motion.div>

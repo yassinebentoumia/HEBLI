@@ -23,6 +23,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
+import { getStaffTitle } from '@/utils/roles';
 import type { Order } from '@/types';
 
 // Loud, long, attention-grabbing "coffee shop bell" notification.
@@ -193,7 +194,7 @@ export default function BaristaDashboard() {
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
-                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Barista</span>
+                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{user ? getStaffTitle(user) : 'Barista'}</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
