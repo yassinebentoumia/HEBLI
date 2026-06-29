@@ -50,3 +50,27 @@ node server.js      # serves at http://localhost:3000
 - Data persists in `data.json` on the server.
 - On Render's **free tier**, the server spins down after 15 min of inactivity. When it wakes up, your data is still there (saved to disk).
 - For permanent persistence at scale, attach a Render persistent disk (paid).
+
+---
+
+## 🤖 AI Assistant — Activate the Real Agent
+
+The Owner Dashboard has an **AI Assistant tab** that becomes a real GPT/Claude/Gemini agent the moment you add an API key. The agent reads your live dashboard (sales, staff, invoices, inventory…) and answers any question in any language.
+
+### Choose one provider and set the env var on Render:
+
+| Provider  | Env var to add        | Default model           | Where to get a key                                              |
+|-----------|-----------------------|-------------------------|-----------------------------------------------------------------|
+| OpenAI    | `OPENAI_API_KEY`      | `gpt-4o-mini`           | https://platform.openai.com/api-keys                            |
+| Anthropic | `ANTHROPIC_API_KEY`   | `claude-3-5-haiku-20241022` | https://console.anthropic.com/settings/keys                |
+| Google    | `GEMINI_API_KEY`      | `gemini-2.0-flash`      | https://aistudio.google.com/apikey                              |
+
+Optionally override the model name with `OPENAI_MODEL`, `ANTHROPIC_MODEL`, or `GEMINI_MODEL`.
+
+### On Render:
+1. Go to your Web Service → **Environment**
+2. Add a key (e.g. `OPENAI_API_KEY` = `sk-...`)
+3. Save — Render redeploys automatically
+4. Open the **Owner Dashboard → AI Assistant** — the model name + green dot appear when active
+
+Without any key, the AI tab still works and tells the user to configure one.

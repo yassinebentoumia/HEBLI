@@ -82,6 +82,8 @@ export const T = {
     ar: 'أضف ملاحظة (مثال: بدون سكر، ساخن جداً، حليب الشوفان...)',
   },
   'cart.placeOrder': { en: 'Place Order', it: 'Conferma ordine', es: 'Realizar pedido', ar: 'تأكيد الطلب' },
+  'cart.goCheckout': { en: 'Go to Checkout', it: 'Vai al checkout', es: 'Ir al checkout', ar: 'إتمام الطلب' },
+  'cart.review': { en: 'Review your order', it: 'Rivedi il tuo ordine', es: 'Revisa tu pedido', ar: 'راجع طلبك' },
   'cart.eachPrice': { en: 'each', it: 'cad.', es: 'c/u', ar: 'للوحدة' },
   'cart.itemCount': { en: 'item', it: 'articolo', es: 'artículo', ar: 'عنصر' },
   'cart.itemsCount': { en: 'items', it: 'articoli', es: 'artículos', ar: 'عناصر' },

@@ -110,7 +110,144 @@ function mergeArrays(existing, incoming, deletedIds) {
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, updatedAt: state._updatedAt || 0 });
+  res.json({
+    ok: true,
+    updatedAt: state._updatedAt || 0,
+    aiProvider: aiProvider(),
+  });
+});
+
+// ============================================================
+// AI AGENT — calls a real LLM (OpenAI / Anthropic / Gemini)
+// User sets ONE of these env vars on Render:
+//   OPENAI_API_KEY     (default model: gpt-4o-mini)
+//   ANTHROPIC_API_KEY  (default model: claude-3-5-haiku-20241022)
+//   GEMINI_API_KEY     (default model: gemini-2.0-flash)
+// ============================================================
+
+function aiProvider() {
+  if (process.env.OPENAI_API_KEY) return 'openai';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  if (process.env.GEMINI_API_KEY) return 'gemini';
+  return null;
+}
+
+async function callOpenAI(systemPrompt, history) {
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+  const messages = [{ role: 'system', content: systemPrompt }, ...history];
+  const r = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({ model, messages, temperature: 0.4 }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`OpenAI ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  return data.choices?.[0]?.message?.content || '(no response)';
+}
+
+async function callAnthropic(systemPrompt, history) {
+  const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-haiku-20241022';
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: history,
+    }),
+  });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`Anthropic ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  return data.content?.[0]?.text || '(no response)';
+}
+
+async function callGemini(systemPrompt, history) {
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const contents = history.map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+  const r = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { temperature: 0.4 },
+      }),
+    }
+  );
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`Gemini ${r.status}: ${text.slice(0, 200)}`);
+  }
+  const data = await r.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '(no response)';
+}
+
+// POST /api/ai
+// Body: { messages: [{role, content}], context: { ... } }
+// Returns: { reply: string, provider: string }
+app.post('/api/ai', async (req, res) => {
+  const provider = aiProvider();
+  if (!provider) {
+    return res.status(503).json({
+      error: 'No AI provider configured. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, or GEMINI_API_KEY on the server.',
+    });
+  }
+
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  const context = req.body?.context || {};
+  if (messages.length === 0) {
+    return res.status(400).json({ error: 'messages required' });
+  }
+
+  // Trim history to last 10 turns to keep tokens reasonable
+  const history = messages
+    .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+    .slice(-10);
+
+  // Build a rich system prompt with the live dashboard snapshot.
+  const systemPrompt = [
+    'You are HEBLI AI — the personal business agent for the owner of a premium coffee shop called HEBLI.',
+    'You are knowledgeable, friendly, and concise. Answer in the SAME LANGUAGE the user used (English, Italian, Spanish, Arabic/Tunisian dialect, French, etc).',
+    'You have full access to the live coffee-shop data below — use it to give real, specific, accurate answers (real numbers, real names, real dates).',
+    'When the user asks about a person ("best staff today", "most productive cashier"), analyze the data and name the actual person.',
+    'When asked about coffee knowledge (brewing, beans, drinks, recipes), share your expertise like a senior barista.',
+    'Use short paragraphs, bullets, and bold key numbers with **markdown** for emphasis.',
+    'If the data is empty for the question, say so honestly — never make up data.',
+    '',
+    '======== LIVE DASHBOARD CONTEXT (JSON, refreshed every request) ========',
+    JSON.stringify(context).slice(0, 60000),
+    '======== END CONTEXT ========',
+  ].join('\n');
+
+  try {
+    let reply;
+    if (provider === 'openai') reply = await callOpenAI(systemPrompt, history);
+    else if (provider === 'anthropic') reply = await callAnthropic(systemPrompt, history);
+    else reply = await callGemini(systemPrompt, history);
+    res.json({ reply, provider });
+  } catch (e) {
+    console.error('AI error:', e);
+    res.status(500).json({ error: String(e?.message || e), provider });
+  }
 });
 
 // GET current shared state

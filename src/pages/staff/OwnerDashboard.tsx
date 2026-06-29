@@ -2,7 +2,7 @@
 // HEBLI – Owner Dashboard (Premium Management Center)
 // ============================================================
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -92,6 +92,11 @@ import {
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
+import CategoryIcon from '@/components/CategoryIcon';
+
+function CategoryIconPreview({ name }: { name: string }) {
+  return <CategoryIcon category={name || 'Coffee'} className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.4} />;
+}
 import ChatPanel from '@/components/ChatPanel';
 import type {
   Product,
@@ -505,7 +510,7 @@ function ProductsTab() {
           >
             <option value="All" className="bg-[#111]">All Categories</option>
             {getCategories().map((c) => (
-              <option key={c.id} value={c.name} className="bg-[#111]">{c.icon} {c.name}</option>
+              <option key={c.id} value={c.name} className="bg-[#111]">{c.name}</option>
             ))}
           </select>
         </div>
@@ -582,7 +587,7 @@ function ProductsTab() {
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/70 outline-none"
                 >
                   {getCategories().map((c) => (
-                    <option key={c.id} value={c.name} className="bg-[#111]">{c.icon} {c.name}</option>
+                    <option key={c.id} value={c.name} className="bg-[#111]">{c.name}</option>
                   ))}
                 </select>
                 <textarea placeholder="Description" value={form.description}
@@ -661,7 +666,7 @@ function CategoriesTab() {
     setCategories(getCategories());
   };
 
-  const iconOptions = ['☕', '🫧', '🥛', '🍵', '🍰', '🧊', '🥐', '🍪', '🥤', '🍫', '🧋', '🍯', '✨', '🌟', '💎'];
+
 
   return (
     <div className="space-y-6">
@@ -677,8 +682,8 @@ function CategoriesTab() {
           <motion.div key={cat.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
             <GlassCard>
               <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.03] text-3xl">
-                  {cat.icon}
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#D4AF37]/10">
+                  <CategoryIcon category={cat.name} className="h-7 w-7 text-[#D4AF37]" strokeWidth={1.4} />
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-white">{cat.name}</h3>
@@ -729,22 +734,16 @@ function CategoriesTab() {
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
                 />
-                <div>
-                  <label className="text-xs text-white/30 mb-2 block">Icon</label>
-                  <div className="flex flex-wrap gap-2">
-                    {iconOptions.map((icon) => (
-                      <button
-                        key={icon}
-                        onClick={() => setForm({ ...form, icon })}
-                        className={`text-xl p-2 rounded-xl transition-all ${
-                          form.icon === icon
-                            ? 'bg-[#D4AF37]/20 border border-[#D4AF37]/40 scale-110'
-                            : 'bg-white/[0.03] border border-white/[0.04] hover:bg-white/[0.06]'
-                        }`}
-                      >
-                        {icon}
-                      </button>
-                    ))}
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+                  <div className="text-xs text-white/40 mb-2">Auto-selected icon (based on the category name)</div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D4AF37]/15">
+                      <CategoryIconPreview name={form.name} />
+                    </div>
+                    <div className="text-[11px] text-white/40 leading-snug">
+                      Professional SVG icon, auto-detected from your category name.
+                      <br />Examples: "Espresso" → coffee cup, "Tea" → teapot, "Cold Drinks" → ice.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1857,166 +1856,233 @@ function AnalyticsTab() {
 // AI Assistant Tab
 // ============================================================
 
-function AIAssistantTab() {
-  const presetQuestions = [
-    { q: 'شنوا أحسن منتج عندي هالشهر؟', en: 'best' },
-    { q: 'قداش ربحت اليوم؟', en: 'revenue' },
-    { q: 'شنوا المنتجات اللي قريب يخلاصو؟', en: 'stock' },
-    { q: 'شنوا أكثر كاطيقوريا تتباع؟', en: 'category' },
-    { q: 'قداش سعر معدل الطلب؟', en: 'avg' },
-  ];
+// ============================================================
+// AI Assistant Tab — Real LLM-powered Agent (multi-language)
+// ============================================================
 
+function AIAssistantTab() {
+  const { user } = useApp();
   const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    { role: 'assistant', content: 'مرحباً! أنا المساعد الذكي لـ HEBLI 🤖\n\nنجم نساعدك تحلل مبيعاتك، مخزونك، وأداء محلّك.\n\nاختار من الأسئلة المقترحة أو اكتب سؤالك:' },
+    {
+      role: 'assistant',
+      content:
+        `Hi ${user?.name?.split(' ')[0] || 'boss'} 👋 — I'm **HEBLI AI**, your personal business agent.\n\n` +
+        `Ask me **anything** about your café — sales, staff performance, best products, inventory, suppliers, brewing tips… in **any language**. I'll analyze your live dashboard and reply intelligently.\n\n` +
+        `Try one of the suggestions below, or just type your question.`,
+    },
   ]);
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [provider, setProvider] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const generateResponse = (userMsg: string) => {
-    const analytics = computeAnalytics('month');
-    const analyticsDay = computeAnalytics('today');
-    const inventory = getInventory();
-    const lowStock = inventory.filter((i) => i.quantity <= i.minStock);
+  // Check which LLM provider is configured
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((d) => setProvider(d.aiProvider || null))
+      .catch(() => {});
+  }, []);
 
-    const lower = userMsg.toLowerCase();
-    const arabic = /[\u0600-\u06FF]/;
-    const isArabic = arabic.test(userMsg);
+  // Auto-scroll on new message
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages, loading]);
 
-    // Detect Tunisian Arabic keywords
-    const hasBest = lower.includes('best') || lower.includes('top') || lower.includes('أحسن') || lower.includes('اكثر') || lower.includes('popular') || lower.includes('يباع');
-    const hasRevenue = lower.includes('revenue') || lower.includes('ربحت') || lower.includes('ربح') || lower.includes('income') || lower.includes('earning') || lower.includes('مال');
-    const hasStock = lower.includes('stock') || lower.includes('مخزون') || lower.includes('يخلاص') || lower.includes('خلص') || lower.includes('low') || lower.includes('قليل');
-    const hasCategory = lower.includes('category') || lower.includes('كاطيقوريا') || lower.includes('نوع');
-    const hasHour = lower.includes('hour') || lower.includes('peak') || lower.includes('busy') || lower.includes('ساعة') || lower.includes('وقت');
-    const hasAvg = lower.includes('avg') || lower.includes('average') || lower.includes('معدل') || lower.includes('متوسط');
+  const presetQuestions = [
+    'Who is the best staff today?',
+    'Quel est le produit le plus vendu ce mois ?',
+    'شنوا أحسن باريستا هالشهر؟',
+    'How much did I earn this week vs last week?',
+    'Which supplier costs me the most?',
+    'Give me 3 ideas to grow my revenue this month',
+    'What inventory is running low?',
+    'Tell me a quick coffee brewing tip',
+  ];
 
-    if (isArabic) {
-      // Tunisian Arabic responses
-      if (hasBest) {
-        const top = analytics.bestSellingProducts[0];
-        if (top) {
-          return `🏆 **${top.name}** هوما أحسن منتج عندك هالشهر!\nتبع منّو **${top.count}** وحدة، وربح منّو **${top.revenue.toFixed(2)} DT** 🎉`;
-        }
-        return 'مازال ما عنديش بيانات كافية هالشهر. جرّب بعد ما تبيع شوية قهوات ☕';
-      } else if (hasRevenue) {
-        return `💰 **اليوم**: ${analyticsDay.totalRevenue.toFixed(2)} DT من ${analyticsDay.totalOrders} طلب\n📅 **هالشهر**: ${analytics.totalRevenue.toFixed(2)} DT من ${analytics.totalOrders} طلب\n💵 المعدل لكل طلب: ${analytics.averageOrderValue.toFixed(2)} DT`;
-      } else if (hasStock) {
-        if (lowStock.length > 0) {
-          let msg = `⚠️ عندك **${lowStock.length}** منتجات قريب يخلاصو:\n\n`;
-          lowStock.forEach(i => {
-            msg += `• **${i.name}**: ${i.quantity} ${i.unit} باقي (الحد الأدنى: ${i.minStock})\n`;
-          });
-          msg += '\nلازم تزيد تشري مخزون 📦';
-          return msg;
-        }
-        return '✅ المخزون عندك كامل مزيان. ما شي قريب يخلاص 👍';
-      } else if (hasCategory) {
-        const topCat = analytics.revenueByCategory[0];
-        if (topCat) {
-          return `📂 أكتر كاطيقوريا تتباع عندك هي **${topCat.category}**\nربحت منّا **${topCat.revenue.toFixed(2)} DT** هالشهر 🏅`;
-        }
-        return 'مازال ما عنديش بيانات على الكاطيقوريات.';
-      } else if (hasHour) {
-        const peak = [...analytics.revenueByHour].sort((a, b) => b.orders - a.orders)[0];
-        if (peak) {
-          return `🕐 أكثر ساعة عندك فيها خدمة هي **${peak.hour}:00**\nفيها **${peak.orders}** طلبات\n\nننصحك تزيد موظف هالوقت ⚡`;
-        }
-        return 'مازال ما عنديش بيانات على الساعات.';
-      } else if (hasAvg) {
-        return `💵 معدل سعر الطلب هالشهر هو **${analytics.averageOrderValue.toFixed(2)} DT**\nمن مجموع ${analytics.totalOrders} طلبات.`;
+  const send = async (msg: string) => {
+    const text = msg.trim();
+    if (!text || loading) return;
+    setError(null);
+    const newMessages = [...messages, { role: 'user' as const, content: text }];
+    setMessages(newMessages);
+    setInput('');
+    setLoading(true);
+
+    try {
+      // Lazy-load context builder to keep initial bundle smaller
+      const { buildAIContext } = await import('@/utils/aiContext');
+      const context = buildAIContext();
+
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
+          context,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const msgErr = data.error || `Server error ${res.status}`;
+        setError(msgErr);
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: msgErr.includes('No AI provider')
+            ? `⚠️ **AI is not configured yet.**\n\nTo enable the agent, set one of these environment variables on your server:\n\n• \`OPENAI_API_KEY\`  → uses GPT-4o-mini\n• \`ANTHROPIC_API_KEY\` → uses Claude 3.5 Haiku\n• \`GEMINI_API_KEY\` → uses Gemini 2.0 Flash\n\nThen redeploy. The agent will instantly come alive.`
+            : `Sorry, I had trouble answering: ${msgErr}`,
+        }]);
+      } else {
+        const data = await res.json();
+        if (data.provider) setProvider(data.provider);
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.reply || '(empty reply)' }]);
       }
-      return `تفضل ملخص سريع:\n\n💰 الربح اليوم: **${analyticsDay.totalRevenue.toFixed(2)} DT**\n📋 عدد الطلبات: **${analytics.totalOrders}**\n💵 المعدل: **${analytics.averageOrderValue.toFixed(2)} DT**\n📦 مخزون قليل: **${lowStock.length}**\n\nجرّب تسأل على:\n• أحسن منتج\n• المخزون\n• الربح\n• الكاطيقوريات`;
+    } catch (e: any) {
+      setError(String(e?.message || e));
+      setMessages((prev) => [...prev, { role: 'assistant', content: `Network error: ${e?.message || e}` }]);
+    } finally {
+      setLoading(false);
     }
-
-    // English fallback
-    if (hasBest) {
-      const top = analytics.bestSellingProducts[0];
-      if (top) return `🏆 **${top.name}** is your best seller with ${top.count} units sold for ${top.revenue.toFixed(2)} DT.`;
-      return 'No sales data yet.';
-    } else if (hasRevenue) {
-      return `💰 Today: ${analyticsDay.totalRevenue.toFixed(2)} DT (${analyticsDay.totalOrders} orders)\nThis month: ${analytics.totalRevenue.toFixed(2)} DT (${analytics.totalOrders} orders)\nAvg: ${analytics.averageOrderValue.toFixed(2)} DT`;
-    } else if (hasStock) {
-      if (lowStock.length > 0) {
-        let msg = `⚠️ ${lowStock.length} items low:\n`;
-        lowStock.forEach(i => { msg += `• ${i.name}: ${i.quantity} ${i.unit}\n`; });
-        return msg;
-      }
-      return '✅ Stock is healthy.';
-    } else if (hasCategory) {
-      const tc = analytics.revenueByCategory[0];
-      return tc ? `📂 Top: **${tc.category}** with ${tc.revenue.toFixed(2)} DT` : 'No data.';
-    } else if (hasHour) {
-      const p = [...analytics.revenueByHour].sort((a, b) => b.orders - a.orders)[0];
-      return p ? `🕐 Peak: ${p.hour}:00 with ${p.orders} orders` : 'No data.';
-    } else if (hasAvg) {
-      return `💵 Avg order: ${analytics.averageOrderValue.toFixed(2)} DT`;
-    }
-    return `💰 Revenue: ${analytics.totalRevenue.toFixed(2)} DT\n📋 Orders: ${analytics.totalOrders}\n📦 Low stock: ${lowStock.length}\n\nTry asking about best sellers, revenue, or stock.`;
   };
 
-  const handleSend = (msg: string) => {
-    if (!msg.trim()) return;
-    setMessages((prev) => [...prev, { role: 'user', content: msg }]);
-    setInput('');
-    setTimeout(() => {
-      const response = generateResponse(msg);
-      setMessages((prev) => [...prev, { role: 'assistant', content: response }]);
-    }, 500);
+  // Render markdown-ish content with bold + line breaks + bullet lists
+  const renderContent = (content: string) => {
+    const escaped = content
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html = escaped
+      .replace(/\*\*(.*?)\*\*/g, '<strong class="text-[#D4AF37]">$1</strong>')
+      .replace(/`([^`]+)`/g, '<code class="rounded bg-white/10 px-1.5 py-0.5 text-[12px] font-mono">$1</code>')
+      .replace(/^(\s*)[-•] (.+)$/gm, '$1<span class="text-[#D4AF37] mr-1.5">•</span>$2')
+      .replace(/\n/g, '<br/>');
+    return <div dangerouslySetInnerHTML={{ __html: html }} />;
+  };
+
+  const resetChat = () => {
+    setMessages([{
+      role: 'assistant',
+      content: `New conversation started. What can I help you with?`,
+    }]);
+    setError(null);
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-200px)]">
-      <GlassCard className="flex-1 flex flex-col">
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+    <div className="flex flex-col h-[calc(100vh-200px)] min-h-[500px]">
+      {/* Header bar with provider status */}
+      <div className="mb-3 flex items-center justify-between rounded-2xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-600 text-black">
+            <Sparkles className="h-4 w-4" />
+            {provider && (
+              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0A0A0A] bg-green-400" />
+            )}
+          </div>
+          <div>
+            <div className="text-sm font-bold leading-tight">HEBLI AI</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/40">
+              {provider === 'openai' && 'GPT · live'}
+              {provider === 'anthropic' && 'Claude · live'}
+              {provider === 'gemini' && 'Gemini · live'}
+              {!provider && 'No model configured'}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={resetChat}
+          className="rounded-lg border border-white/[0.08] px-3 py-1.5 text-[11px] font-semibold text-white/50 hover:text-white hover:bg-white/[0.05] transition-colors"
+        >
+          New Chat
+        </button>
+      </div>
+
+      <GlassCard className="flex-1 flex flex-col min-h-0" hover={false}>
+        {/* Messages */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pr-1 mb-3">
           {messages.map((msg, i) => (
             <motion.div
               key={i}
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${
+              {msg.role === 'assistant' && (
+                <div className="mr-2 mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D4AF37] to-amber-600 text-black">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </div>
+              )}
+              <div className={`max-w-[82%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                 msg.role === 'user'
-                  ? 'bg-[#D4AF37] text-black'
-                  : 'bg-white/[0.05] text-white/90 whitespace-pre-line'
+                  ? 'bg-[#D4AF37] text-black font-medium'
+                  : 'bg-white/[0.05] text-white/90'
               }`}>
-                {msg.role === 'assistant' ? (
-                  <div dangerouslySetInnerHTML={{ __html: msg.content.replace(/\*\*(.*?)\*\*/g, '<strong class="text-[#D4AF37]">$1</strong>') }} />
-                ) : (
-                  msg.content
-                )}
+                {msg.role === 'assistant' ? renderContent(msg.content) : msg.content}
               </div>
             </motion.div>
           ))}
+
+          {/* Thinking indicator */}
+          {loading && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="flex justify-start"
+            >
+              <div className="mr-2 mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#D4AF37] to-amber-600 text-black">
+                <Sparkles className="h-3.5 w-3.5 animate-pulse" />
+              </div>
+              <div className="rounded-2xl bg-white/[0.05] px-4 py-3 text-sm">
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37] animate-pulse" style={{ animationDelay: '0ms' }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37] animate-pulse" style={{ animationDelay: '150ms' }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#D4AF37] animate-pulse" style={{ animationDelay: '300ms' }} />
+                </span>
+              </div>
+            </motion.div>
+          )}
         </div>
 
-        {/* Preset Questions */}
-        {messages.length <= 1 && (
-          <div className="mt-4 space-y-2">
-            {presetQuestions.map((pq) => (
-              <button
-                key={pq.en}
-                onClick={() => handleSend(pq.q)}
-                className="w-full text-left rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-sm text-white/70 hover:bg-white/[0.05] hover:border-[#D4AF37]/20 hover:text-[#D4AF37] transition-all"
-              >
-                {pq.q}
-              </button>
-            ))}
+        {/* Preset suggestions (only on first turn) */}
+        {messages.length <= 1 && !loading && (
+          <div className="mb-3">
+            <div className="text-[10px] uppercase tracking-wider text-white/30 mb-2 px-1">Try asking</div>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {presetQuestions.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => send(q)}
+                  className="text-left rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-white/60 hover:bg-white/[0.05] hover:border-[#D4AF37]/30 hover:text-white transition-all"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
-        <div className="mt-4 flex gap-3">
+        {/* Input */}
+        <div className="flex gap-2">
           <input
             type="text"
-            placeholder="اكتب سؤالك..."
+            placeholder="Ask anything — sales, staff, coffee, ideas…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && input.trim() && handleSend(input)}
-            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50"
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send(input)}
+            disabled={loading}
+            className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#D4AF37]/50 disabled:opacity-50"
           />
-          <GoldButton onClick={() => input.trim() && handleSend(input)}>
+          <button
+            onClick={() => send(input)}
+            disabled={!input.trim() || loading}
+            className="rounded-xl bg-[#D4AF37] px-4 text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 font-bold"
+          >
             <Send className="h-4 w-4" />
-          </GoldButton>
+          </button>
         </div>
+
+        {error && (
+          <div className="mt-2 text-[11px] text-red-400/80 px-1">{error}</div>
+        )}
       </GlassCard>
     </div>
   );

@@ -9,9 +9,8 @@ import {
   Shield, Menu as MenuIcon, X, MessageCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import GoldButton from '@/components/ui/GoldButton';
-import GlassCard from '@/components/ui/GlassCard';
-import { getActiveProducts, getCategories, getCategoryIcon } from '@/utils/store';
+import { getActiveProducts, getCategories } from '@/utils/store';
+import CategoryIcon from '@/components/CategoryIcon';
 import { useT } from '@/i18n/I18nProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import InstallAppButton from '@/components/InstallAppButton';
@@ -100,104 +99,130 @@ export default function Landing() {
         )}
       </nav>
 
-      {/* Hero Section */}
+      {/* ========================================================
+          HERO — Premium, minimal, attractive
+          ======================================================== */}
       <motion.section
         style={{ opacity: heroOpacity, scale: heroScale }}
         className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-4 pt-16"
       >
-        {/* Animated background */}
-        <div className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(212,175,55,0.08)_0%,_transparent_70%)]" />
-          <motion.div
-            className="absolute -top-1/2 left-1/2 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-[#D4AF37]/5 blur-3xl"
-            animate={{ scale: [1, 1.2, 1], rotate: [0, 45, 0] }}
-            transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
-          />
+        {/* Background — soft gold spotlight + subtle grain */}
+        <div className="absolute inset-0 -z-10 pointer-events-none">
+          {/* Top spotlight */}
+          <div className="absolute inset-x-0 -top-32 mx-auto h-[680px] w-[680px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.10)_0%,_transparent_60%)]" />
+          {/* Bottom warm gradient */}
+          <div className="absolute -bottom-32 left-1/2 h-[400px] w-[800px] -translate-x-1/2 rounded-full bg-[#D4AF37]/[0.04] blur-3xl" />
+          {/* Faint grid */}
           <div
-            className="absolute inset-0 opacity-[0.03]"
+            className="absolute inset-0 opacity-[0.025]"
             style={{
               backgroundImage:
-                'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-              backgroundSize: '60px 60px',
+                'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)',
+              backgroundSize: '72px 72px',
+              maskImage: 'radial-gradient(ellipse 60% 60% at 50% 30%, #000 30%, transparent 80%)',
+              WebkitMaskImage: 'radial-gradient(ellipse 60% 60% at 50% 30%, #000 30%, transparent 80%)',
             }}
           />
         </div>
-
-        {/* Floating icons */}
-        {[...Array(10)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="pointer-events-none absolute text-2xl opacity-10"
-            style={{
-              left: `${10 + Math.random() * 80}%`,
-              top: `${10 + Math.random() * 80}%`,
-            }}
-            animate={{ y: [0, -30, 0], rotate: [0, 15, 0] }}
-            transition={{
-              duration: 4 + Math.random() * 4,
-              repeat: Infinity,
-              delay: Math.random() * 4,
-              ease: 'easeInOut',
-            }}
-          >
-            {categories[i % categories.length]?.icon || '☕'}
-          </motion.div>
-        ))}
 
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center"
+          className="relative z-10 text-center max-w-3xl mx-auto"
         >
+          {/* Tagline pill */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.5 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/20 bg-[#D4AF37]/5 px-4 py-2"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1, duration: 0.8 }}
+            className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#D4AF37]/15 bg-[#D4AF37]/[0.04] px-3.5 py-1.5"
           >
-            <Sparkles className="h-4 w-4 text-[#D4AF37]" />
-            <span className="text-xs font-medium tracking-[0.2em] text-[#D4AF37] uppercase">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="absolute inset-0 rounded-full bg-[#D4AF37] opacity-70 animate-ping" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#D4AF37]" />
+            </span>
+            <span className="text-[10px] font-semibold tracking-[0.25em] text-[#D4AF37]/90 uppercase">
               {t('landing.tagline')}
             </span>
           </motion.div>
 
-          <h1 className="text-6xl font-bold tracking-tighter sm:text-7xl md:text-8xl lg:text-9xl">
-            <span className="bg-gradient-to-b from-[#D4AF37] via-amber-300 to-amber-600 bg-clip-text text-transparent">
-              HEBLI
-            </span>
-          </h1>
+          {/* HEBLI wordmark — animated letter-by-letter reveal with shimmer */}
+          <div className="relative">
+            <h1 className="relative text-[18vw] sm:text-8xl md:text-9xl font-black tracking-[-0.05em] leading-none flex justify-center">
+              {'HEBLI'.split('').map((char, i) => (
+                <motion.span
+                  key={i}
+                  initial={{ opacity: 0, y: 80, rotate: -8 }}
+                  animate={{ opacity: 1, y: 0, rotate: 0 }}
+                  transition={{ delay: 0.15 + i * 0.08, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                  className="relative inline-block"
+                >
+                  <span className="bg-gradient-to-b from-[#FFE8A3] via-[#D4AF37] to-[#8C6F1F] bg-clip-text text-transparent">
+                    {char}
+                  </span>
+                </motion.span>
+              ))}
+            </h1>
+            {/* Animated gold shimmer overlay sweeping across */}
+            <motion.div
+              className="pointer-events-none absolute inset-0"
+              initial={{ x: '-100%' }}
+              animate={{ x: '200%' }}
+              transition={{ duration: 3.5, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }}
+            >
+              <div
+                className="h-full w-1/3 bg-gradient-to-r from-transparent via-white/15 to-transparent"
+                style={{ transform: 'skewX(-20deg)' }}
+              />
+            </motion.div>
+            {/* Underline */}
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 96, opacity: 1 }}
+              transition={{ delay: 0.9, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="mt-6 mx-auto h-px bg-gradient-to-r from-transparent via-[#D4AF37]/60 to-transparent"
+            />
+          </div>
 
+          {/* Sub-tagline */}
           <motion.p
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.8 }}
-            className="mx-auto mt-6 max-w-lg text-base text-white/50 sm:text-lg"
+            transition={{ delay: 0.35, duration: 0.8 }}
+            className="mx-auto mt-8 max-w-md text-[15px] sm:text-base leading-relaxed text-white/45"
           >
             {t('landing.hero.subtitle')}
           </motion.p>
 
+          {/* Actions */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center"
+            transition={{ delay: 0.5, duration: 0.8 }}
+            className="mt-10 flex flex-col items-center gap-3 sm:flex-row sm:justify-center"
           >
-            <GoldButton size="lg" onClick={() => navigate('/client/menu')}>
+            <button
+              onClick={() => navigate('/client/menu')}
+              className="group relative w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#D4AF37] to-amber-500 px-7 py-3.5 text-sm font-bold text-black tracking-wider uppercase shadow-[0_10px_40px_-10px_rgba(212,175,55,0.55)] hover:shadow-[0_15px_45px_-10px_rgba(212,175,55,0.75)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+            >
               {t('landing.browse')}
-              <ChevronRight className="h-4 w-4" />
-            </GoldButton>
-            <GoldButton variant="outline" size="lg" onClick={() => navigate('/client/track')}>
+              <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+            <button
+              onClick={() => navigate('/client/track')}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full border border-white/[0.10] bg-white/[0.02] px-7 py-3.5 text-sm font-semibold text-white/70 tracking-wider uppercase hover:bg-white/[0.05] hover:text-white transition-all"
+            >
               {t('nav.track')}
-            </GoldButton>
+            </button>
           </motion.div>
 
-          {/* Stats */}
+          {/* Stats — slimmer */}
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.9, duration: 0.8 }}
-            className="mt-16 grid grid-cols-3 gap-8 border-t border-white/[0.06] pt-8"
+            transition={{ delay: 0.75, duration: 0.8 }}
+            className="mx-auto mt-16 grid max-w-md grid-cols-3 gap-6 border-t border-white/[0.06] pt-8"
           >
             {[
               { value: `${products.length}+`, label: t('landing.stats.drinks') },
@@ -205,107 +230,140 @@ export default function Landing() {
               { value: '24/7', label: t('landing.stats.service') },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
-                <div className="text-2xl font-bold text-[#D4AF37]">{stat.value}</div>
-                <div className="mt-1 text-xs text-white/40">{stat.label}</div>
+                <div className="text-xl sm:text-2xl font-bold text-[#D4AF37]">{stat.value}</div>
+                <div className="mt-1 text-[10px] tracking-[0.15em] uppercase text-white/35">{stat.label}</div>
               </div>
             ))}
           </motion.div>
         </motion.div>
 
-        {/* Scroll indicator */}
+        {/* Scroll indicator — subtle */}
         <motion.div
-          className="absolute bottom-8"
-          animate={{ y: [0, 8, 0] }}
-          transition={{ duration: 2, repeat: Infinity }}
+          className="absolute bottom-8 left-1/2 -translate-x-1/2"
+          animate={{ y: [0, 6, 0] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
         >
-          <div className="flex h-10 w-5 items-start justify-center rounded-full border border-white/10 pt-2">
-            <div className="h-1.5 w-0.5 rounded-full bg-[#D4AF37]" />
+          <div className="flex flex-col items-center gap-1.5 text-white/30">
+            <div className="text-[9px] tracking-[0.3em] uppercase">scroll</div>
+            <div className="flex h-7 w-4 items-start justify-center rounded-full border border-white/15 pt-1.5">
+              <div className="h-1 w-px rounded-full bg-[#D4AF37]" />
+            </div>
           </div>
         </motion.div>
       </motion.section>
 
-      {/* Featured Products */}
-      <section className="px-4 py-24">
+      {/* ========================================================
+          FEATURED PRODUCTS — Cleaner, premium grid
+          ======================================================== */}
+      <section className="relative px-4 py-28">
+        {/* Faint gold band across the section */}
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/20 to-transparent" />
+
         <div className="mx-auto max-w-7xl">
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.8 }}
-            className="mb-12 text-center"
+            className="mb-14 text-center"
           >
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.02] px-4 py-1.5 text-xs tracking-[0.2em] text-white/40 uppercase">
+            <div className="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.3em] text-[#D4AF37]/80 uppercase">
+              <span className="h-px w-6 bg-[#D4AF37]/40" />
               <Coffee className="h-3 w-3" />
               {t('landing.collection')}
+              <span className="h-px w-6 bg-[#D4AF37]/40" />
             </div>
-            <h2 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
-              {t('landing.signature')} <span className="text-[#D4AF37]">{t('landing.creations')}</span>
+            <h2 className="mt-5 text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.05]">
+              {t('landing.signature')} <span className="bg-gradient-to-r from-[#FFE8A3] to-[#D4AF37] bg-clip-text text-transparent">{t('landing.creations')}</span>
             </h2>
           </motion.div>
 
-          {/* Category Filter */}
-          <div className="mb-10 flex flex-wrap justify-center gap-2">
-            <button
+          {/* Category Filter — staggered entrance + tap microinteraction */}
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            variants={{ visible: { transition: { staggerChildren: 0.05 } }, hidden: {} }}
+            className="mb-12 flex flex-wrap justify-center gap-2"
+          >
+            <motion.button
+              variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
               onClick={() => setActiveCategory('All')}
-              className={`rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
+              className={`rounded-full px-4 py-2 text-[11px] font-semibold tracking-[0.1em] uppercase transition-colors ${
                 activeCategory === 'All'
-                  ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20'
+                  ? 'bg-[#D4AF37] text-black shadow-[0_8px_24px_-8px_rgba(212,175,55,0.6)]'
                   : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
               }`}
             >
               ✦ {t('menu.all')}
-            </button>
+            </motion.button>
             {categories.map((cat) => (
-              <button
+              <motion.button
                 key={cat.id}
+                variants={{ hidden: { opacity: 0, y: 8 }, visible: { opacity: 1, y: 0 } }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => setActiveCategory(cat.name)}
-                className={`rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold tracking-[0.1em] uppercase transition-colors ${
                   activeCategory === cat.name
-                    ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20'
+                    ? 'bg-[#D4AF37] text-black shadow-[0_8px_24px_-8px_rgba(212,175,55,0.6)]'
                     : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
                 }`}
               >
-                {cat.icon} {cat.name}
-              </button>
+                <CategoryIcon category={cat.name} className="h-3.5 w-3.5" />
+                {cat.name}
+              </motion.button>
             ))}
-          </div>
+          </motion.div>
 
           {/* Products Grid */}
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <div className="grid gap-5 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((product, index) => (
               <motion.div
                 key={product.id}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 24 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.05, duration: 0.5 }}
+                viewport={{ once: true, margin: '-50px' }}
+                transition={{ delay: index * 0.04, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+                onClick={() => navigate('/client/menu')}
+                className="group cursor-pointer"
               >
-                <GlassCard className="group h-full">
-                  <div className="mb-4 flex h-40 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5 text-6xl overflow-hidden">
-                    {product.image ? (
-                      <img src={product.image} alt={product.name} className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-105" />
-                    ) : (
-                      <span className="opacity-40 transition-transform duration-500 group-hover:scale-110">
-                        {getCategoryIcon(product.category)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mb-1 text-xs font-medium tracking-wider text-[#D4AF37] uppercase">
-                    {product.category}
-                  </div>
-                  <h3 className="text-lg font-semibold text-white group-hover:text-[#D4AF37] transition-colors">{product.name}</h3>
-                  <p className="mt-1 text-sm text-white/40 line-clamp-2">{product.description}</p>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xl font-bold text-[#D4AF37]">{product.price.toFixed(2)} DT</span>
-                    <div className="flex items-center gap-0.5 text-amber-400">
-                      <Star className="h-3 w-3 fill-current" />
-                      <Star className="h-3 w-3 fill-current" />
-                      <Star className="h-3 w-3 fill-current" />
-                      <Star className="h-3 w-3 fill-current" />
-                      <Star className="h-3 w-3 fill-current opacity-30" />
+                <div className="relative h-full overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-white/[0.01] p-5 transition-all duration-300 hover:border-[#D4AF37]/30 hover:from-[#D4AF37]/[0.04]">
+                  {/* Subtle gold glow on hover */}
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-tr from-[#D4AF37]/0 to-[#D4AF37]/0 opacity-0 transition-opacity duration-500 group-hover:from-[#D4AF37]/10 group-hover:opacity-100" />
+
+                  <div className="relative">
+                    <div className="mb-4 flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#D4AF37]/15 via-amber-600/[0.04] to-transparent relative">
+                      {product.image ? (
+                        <img src={product.image} alt={product.name} className="h-full w-full rounded-xl object-cover transition-transform duration-700 group-hover:scale-110" />
+                      ) : (
+                        <CategoryIcon
+                          category={product.category}
+                          className="h-16 w-16 text-[#D4AF37]/40 transition-all duration-700 group-hover:text-[#D4AF37]/70 group-hover:scale-110 group-hover:rotate-3"
+                          strokeWidth={1.2}
+                        />
+                      )}
+                    </div>
+
+                    <div className="text-[10px] font-semibold tracking-[0.18em] text-[#D4AF37]/80 uppercase mb-1.5">
+                      {product.category}
+                    </div>
+                    <h3 className="text-lg font-bold tracking-tight text-white group-hover:text-[#D4AF37] transition-colors line-clamp-1">
+                      {product.name}
+                    </h3>
+                    <p className="mt-1 text-xs text-white/40 line-clamp-2 leading-relaxed">{product.description}</p>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <span className="text-xl font-black text-[#D4AF37] tracking-tight">{product.price.toFixed(2)} <span className="text-xs font-bold text-[#D4AF37]/70">DT</span></span>
+                      <div className="flex items-center gap-0.5 text-amber-400/90">
+                        {[0, 1, 2, 3].map((i) => <Star key={i} className="h-3 w-3 fill-current" />)}
+                        <Star className="h-3 w-3 fill-current opacity-25" />
+                      </div>
                     </div>
                   </div>
-                </GlassCard>
+                </div>
               </motion.div>
             ))}
           </div>
@@ -317,12 +375,15 @@ export default function Landing() {
             </div>
           )}
 
-          <div className="mt-12 text-center">
-            <GoldButton size="lg" onClick={() => navigate('/client/menu')}>
+          <div className="mt-14 text-center">
+            <button
+              onClick={() => navigate('/client/menu')}
+              className="group inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#D4AF37] to-amber-500 px-8 py-4 text-sm font-bold uppercase tracking-[0.15em] text-black shadow-[0_15px_45px_-12px_rgba(212,175,55,0.6)] hover:scale-[1.02] active:scale-[0.98] transition-all"
+            >
               <ShoppingBag className="h-4 w-4" />
               {t('landing.start')}
-              <ArrowRight className="h-4 w-4" />
-            </GoldButton>
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </button>
           </div>
         </div>
       </section>

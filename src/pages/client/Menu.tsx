@@ -5,13 +5,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import {
-  ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Search, Check, Coffee, X, Sparkles
+  ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Search, Check, Coffee, X, Sparkles, ChevronRight,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
-import { getActiveProducts, getCategories, getCategoryIcon, addOrder, addAuditLog, addNotification } from '@/utils/store';
+import { getActiveProducts, getCategories, addOrder, addAuditLog, addNotification } from '@/utils/store';
+import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category } from '@/types';
 
 export default function Menu() {
@@ -213,7 +214,7 @@ export default function Menu() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-5xl px-4 py-8">
+      <main className="relative z-10 mx-auto max-w-5xl px-4 py-8 pb-32">
         {/* Hero Section */}
         <motion.div
           ref={heroRef}
@@ -266,13 +267,14 @@ export default function Menu() {
               key={cat.id}
               whileTap={{ scale: 0.95 }}
               onClick={() => setActiveCategory(cat.name)}
-              className={`rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
                 activeCategory === cat.name
                   ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20'
                   : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
               }`}
             >
-              {cat.icon} {cat.name}
+              <CategoryIcon category={cat.name} className="h-3.5 w-3.5" />
+              {cat.name}
             </motion.button>
           ))}
         </div>
@@ -296,16 +298,20 @@ export default function Menu() {
                   {/* Glow effect on hover */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[#D4AF37]/0 to-[#D4AF37]/0 group-hover:from-[#D4AF37]/5 group-hover:to-amber-600/5 transition-all duration-500" />
 
-                  <div className="mb-4 flex h-40 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5 text-6xl overflow-hidden relative z-10">
+                  <div className="mb-4 flex h-40 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5 overflow-hidden relative z-10">
                     {product.image ? (
                       <img src={product.image} alt={product.name} className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-110" />
                     ) : (
-                      <motion.span
+                      <motion.div
                         animate={addedId === product.id ? { scale: [1, 1.2, 1] } : {}}
-                        className="opacity-40 transition-transform duration-500 group-hover:scale-110"
+                        className="transition-transform duration-500 group-hover:scale-110"
                       >
-                        {getCategoryIcon(product.category)}
-                      </motion.span>
+                        <CategoryIcon
+                          category={product.category}
+                          className="h-14 w-14 text-[#D4AF37]/50 group-hover:text-[#D4AF37]/80 transition-colors"
+                          strokeWidth={1.2}
+                        />
+                      </motion.div>
                     )}
                   </div>
 
@@ -351,6 +357,58 @@ export default function Menu() {
           </div>
         )}
       </main>
+
+      {/* ========================================================
+          STICKY CHECKOUT BAR — appears when cart has items
+          ======================================================== */}
+      <AnimatePresence>
+        {totalItems > 0 && !cartOpen && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+            className="fixed inset-x-0 bottom-0 z-40 px-3 pb-3 sm:px-4 sm:pb-4 pointer-events-none"
+            style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 0.75rem)' }}
+          >
+            <div className="mx-auto max-w-md pointer-events-auto">
+              <motion.button
+                onClick={() => setCartOpen(true)}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                className="group relative w-full overflow-hidden rounded-2xl bg-gradient-to-r from-[#D4AF37] to-amber-500 px-5 py-4 text-black shadow-[0_20px_60px_-15px_rgba(212,175,55,0.7)] backdrop-blur"
+              >
+                {/* Shimmer */}
+                <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/30 to-transparent group-hover:translate-x-full transition-transform duration-1000" />
+
+                <div className="relative flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-black/15">
+                      <ShoppingCart className="h-5 w-5" />
+                      <span className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black text-[10px] font-black text-[#D4AF37]">
+                        {totalItems}
+                      </span>
+                    </div>
+                    <div className="text-left leading-tight">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-70">{t('cart.review')}</div>
+                      <div className="text-base font-black">{t('cart.goCheckout')}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right leading-tight">
+                      <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{t('common.total')}</div>
+                      <div className="text-base font-black tracking-tight">{total.toFixed(2)} DT</div>
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/15 group-hover:translate-x-0.5 transition-transform">
+                      <ChevronRight className="h-5 w-5" />
+                    </div>
+                  </div>
+                </div>
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cart Drawer */}
       <AnimatePresence>
