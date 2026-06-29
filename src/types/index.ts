@@ -145,6 +145,21 @@ export interface Invoice {
   date: string;             // YYYY-MM-DD
 }
 
+// Inventory consumption — tracks deductions from the invoice-derived stock.
+export interface Consumption {
+  id: string;
+  productKey: string;       // base product (e.g. "lait")
+  productName: string;      // display name shown in inventory
+  variantKey?: string;      // variant key (e.g. "lait 1l")
+  variantName?: string;     // display variant ("Lait 1L")
+  quantity: number;
+  unit?: string;
+  reason?: string;          // optional note
+  consumedBy: string;       // staff name
+  createdAt: string;
+  date: string;             // YYYY-MM-DD
+}
+
 export interface Payment {
   id: string;
   orderId: string;

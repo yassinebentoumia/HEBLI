@@ -18,6 +18,7 @@ import type {
   AppNotification,
   Supplier,
   Invoice,
+  Consumption,
 } from '@/types';
 import { schedulePush, SYNC_KEYS, recordDeletion } from './sync';
 
@@ -36,6 +37,7 @@ const KEYS = {
   notifications: 'hebli_notifications',
   suppliers: 'hebli_suppliers',
   invoices: 'hebli_invoices',
+  consumptions: 'hebli_consumptions',
   backups: 'hebli_backups',
   currentUser: 'hebli_current_user',
 };
@@ -811,6 +813,26 @@ export function nextInvoiceNumber(): string {
     if (!isNaN(n) && n > max) max = n;
   });
   return 'FAC-' + String(max + 1).padStart(6, '0');
+}
+
+// ============================================================
+// Consumption (Owner deducts stock from inventory)
+// ============================================================
+
+export function getConsumptions(): Consumption[] {
+  return safeRead<Consumption[]>(KEYS.consumptions, []);
+}
+
+export function addConsumption(c: Consumption): void {
+  const all = getConsumptions();
+  all.push(c);
+  atomicWrite(KEYS.consumptions, all);
+}
+
+export function deleteConsumption(id: string): void {
+  recordDeletion(KEYS.consumptions, id);
+  const all = getConsumptions().filter((c) => c.id !== id);
+  atomicWrite(KEYS.consumptions, all);
 }
 
 // ============================================================

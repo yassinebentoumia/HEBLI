@@ -20,6 +20,7 @@ const BaristaDashboard = lazy(() => import('@/pages/staff/BaristaDashboard'));
 const CashierDashboard = lazy(() => import('@/pages/staff/CashierDashboard'));
 const OwnerDashboard = lazy(() => import('@/pages/staff/OwnerDashboard'));
 const CreateInvoice = lazy(() => import('@/pages/staff/CreateInvoice'));
+const ShiftReport = lazy(() => import('@/pages/staff/ShiftReport'));
 
 function PageLoader() {
   return (
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/cashier" element={<CashierDashboard />} />
             <Route path="/cashier/invoice" element={<CreateInvoice />} />
             <Route path="/owner" element={<OwnerDashboard />} />
+            <Route path="/report" element={<ShiftReport />} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />

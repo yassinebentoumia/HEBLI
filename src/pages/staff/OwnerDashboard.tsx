@@ -87,6 +87,8 @@ import {
   updateSupplier,
   deleteSupplier,
   getInvoices,
+  getConsumptions,
+  addConsumption,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
@@ -103,16 +105,18 @@ import type {
   Supplier,
   SupplierProduct,
   Invoice,
+  Consumption,
   StaffRole,
 } from '@/types';
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'reports' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
   { key: 'orders', label: 'Orders', icon: Receipt },
+  { key: 'reports', label: 'Shift Reports', icon: FileText },
   { key: 'invoices', label: 'Invoices', icon: FileText },
   { key: 'products', label: 'Products', icon: Package },
   { key: 'categories', label: 'Categories', icon: Package },
@@ -145,6 +149,7 @@ export default function OwnerDashboard() {
       case 'inventory': return <InventoryTab />;
       case 'orders': return <OrdersTab />;
       case 'invoices': return <InvoicesTab />;
+      case 'reports': return <ReportsTab />;
       case 'analytics': return <AnalyticsTab />;
       case 'chat': return <TeamChatTab />;
       case 'tickets': return <TicketsTab />;
@@ -1200,21 +1205,18 @@ function splitProductName(full: string): { base: string; variant: string } {
   return { base: full, variant: '' };
 }
 
-function buildInventoryFromInvoices(invoices: Invoice[]): InventoryGroup[] {
+function buildInventoryFromInvoices(invoices: Invoice[], consumptions: Consumption[] = []): InventoryGroup[] {
   const variantMap = new Map<string, InventoryGroup['variants'][number]>();
   const groupMap = new Map<string, InventoryGroup>();
 
   invoices.forEach((inv) => {
     inv.lines.forEach((line) => {
-      // The product name in invoice lines often contains "/unit" suffix from supplier setup.
-      // Strip the trailing "/ unit" tail to recover the base product name.
       const cleanName = line.productName.replace(/\s*\/\s*.+$/, '').trim();
       const { base, variant } = splitProductName(cleanName);
       const baseKey = base.toLowerCase();
       const variantKey = cleanName.toLowerCase();
       const unit = (line.productName.match(/\/\s*(.+)$/) || [, ''])[1].trim();
 
-      // Variant
       let v = variantMap.get(variantKey);
       if (!v) {
         v = {
@@ -1241,7 +1243,6 @@ function buildInventoryFromInvoices(invoices: Invoice[]): InventoryGroup[] {
       });
       if (!v.suppliers.includes(inv.supplierName)) v.suppliers.push(inv.supplierName);
 
-      // Group (base product)
       let g = groupMap.get(baseKey);
       if (!g) {
         g = {
@@ -1260,10 +1261,21 @@ function buildInventoryFromInvoices(invoices: Invoice[]): InventoryGroup[] {
     });
   });
 
+  // SUBTRACT consumptions
+  consumptions.forEach((c) => {
+    if (c.variantKey) {
+      const v = variantMap.get(c.variantKey);
+      if (v) v.qty = Math.max(0, v.qty - c.quantity);
+    }
+    const g = groupMap.get(c.productKey);
+    if (g) g.totalQty = Math.max(0, g.totalQty - c.quantity);
+  });
+
   // Compute averages + attach variants to groups
   variantMap.forEach((v) => {
     const totalCost = v.lines.reduce((s, l) => s + l.qty * l.unitPrice, 0);
-    v.avgPrice = v.qty > 0 ? totalCost / v.qty : 0;
+    const totalQtyAcrossLines = v.lines.reduce((s, l) => s + l.qty, 0);
+    v.avgPrice = totalQtyAcrossLines > 0 ? totalCost / totalQtyAcrossLines : 0;
     v.lines.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     const { base } = splitProductName(v.lines[0]?.productName || v.name);
     const g = groupMap.get(base.toLowerCase());
@@ -1274,12 +1286,26 @@ function buildInventoryFromInvoices(invoices: Invoice[]): InventoryGroup[] {
 }
 
 function InventoryTab() {
+  const { user, addLog } = useApp();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [consumptions, setConsumptions] = useState<Consumption[]>([]);
   const [search, setSearch] = useState('');
   const [openGroup, setOpenGroup] = useState<InventoryGroup | null>(null);
   const [openVariant, setOpenVariant] = useState<InventoryGroup['variants'][number] | null>(null);
 
-  const load = () => setInvoices(getInvoices());
+  // Consume modal state
+  const [consumeTarget, setConsumeTarget] = useState<{
+    productKey: string; productName: string;
+    variantKey?: string; variantName?: string;
+    unit?: string; available: number;
+  } | null>(null);
+  const [consumeQty, setConsumeQty] = useState('');
+  const [consumeReason, setConsumeReason] = useState('');
+
+  const load = () => {
+    setInvoices(getInvoices());
+    setConsumptions(getConsumptions());
+  };
 
   useEffect(() => {
     load();
@@ -1287,7 +1313,41 @@ function InventoryTab() {
     return () => clearInterval(int);
   }, []);
 
-  const groups = useMemo(() => buildInventoryFromInvoices(invoices), [invoices]);
+  const groups = useMemo(() => buildInventoryFromInvoices(invoices, consumptions), [invoices, consumptions]);
+
+  const performConsume = () => {
+    if (!consumeTarget) return;
+    const qty = parseFloat(consumeQty);
+    if (isNaN(qty) || qty <= 0) return;
+    addConsumption({
+      id: 'cons-' + Date.now(),
+      productKey: consumeTarget.productKey,
+      productName: consumeTarget.productName,
+      variantKey: consumeTarget.variantKey,
+      variantName: consumeTarget.variantName,
+      quantity: qty,
+      unit: consumeTarget.unit,
+      reason: consumeReason.trim() || undefined,
+      consumedBy: user?.name || 'Owner',
+      createdAt: new Date().toISOString(),
+      date: new Date().toISOString().split('T')[0],
+    });
+    addLog(
+      'Inventory Consumed',
+      `${qty}${consumeTarget.unit ? ' ' + consumeTarget.unit : ''} of ${consumeTarget.variantName || consumeTarget.productName}${consumeReason ? ` — ${consumeReason}` : ''}`
+    );
+    setConsumeTarget(null);
+    setConsumeQty('');
+    setConsumeReason('');
+    // refresh in next tick
+    setTimeout(load, 100);
+  };
+
+  // Recent consumption list
+  const recentConsumptions = useMemo(
+    () => consumptions.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 8),
+    [consumptions]
+  );
 
   const filteredGroups = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -1348,42 +1408,84 @@ function InventoryTab() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredGroups.map((g) => (
-            <button
-              key={g.key}
-              onClick={() => setOpenGroup(g)}
-              className="text-left group"
-            >
-              <GlassCard className="h-full">
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-[10px] tracking-wider text-[#D4AF37] uppercase">
-                    {g.variants.length} variant{g.variants.length !== 1 ? 's' : ''}
-                  </span>
-                  <span className="text-[10px] text-white/30">{g.totalSpent.toFixed(2)} DT</span>
-                </div>
-                <h3 className="text-lg font-bold capitalize">{g.displayName}</h3>
-                <div className="mt-2 text-3xl font-black text-white">
-                  {g.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                  <span className="text-sm text-white/30 ml-1.5">{g.baseUnit || ''}</span>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {g.variants.slice(0, 3).map((v) => (
-                    <span key={v.key} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
-                      {v.name}
+            <div key={g.key} className="relative group">
+              <button onClick={() => setOpenGroup(g)} className="w-full text-left">
+                <GlassCard className="h-full">
+                  <div className="flex items-start justify-between mb-2">
+                    <span className="text-[10px] tracking-wider text-[#D4AF37] uppercase">
+                      {g.variants.length} variant{g.variants.length !== 1 ? 's' : ''}
                     </span>
-                  ))}
-                  {g.variants.length > 3 && (
-                    <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/40">
-                      +{g.variants.length - 3}
-                    </span>
-                  )}
-                </div>
-                <div className="mt-3 text-[10px] text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors flex items-center gap-1">
-                  Tap for details →
-                </div>
-              </GlassCard>
-            </button>
+                    <span className="text-[10px] text-white/30">{g.totalSpent.toFixed(2)} DT</span>
+                  </div>
+                  <h3 className="text-lg font-bold capitalize">{g.displayName}</h3>
+                  <div className="mt-2 text-3xl font-black text-white">
+                    {g.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    <span className="text-sm text-white/30 ml-1.5">{g.baseUnit || ''}</span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {g.variants.slice(0, 3).map((v) => (
+                      <span key={v.key} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">
+                        {v.name}
+                      </span>
+                    ))}
+                    {g.variants.length > 3 && (
+                      <span className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/40">
+                        +{g.variants.length - 3}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="text-[10px] text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors">
+                      Tap for details →
+                    </div>
+                  </div>
+                </GlassCard>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setConsumeTarget({
+                    productKey: g.key,
+                    productName: g.displayName,
+                    unit: g.baseUnit,
+                    available: g.totalQty,
+                  });
+                }}
+                className="absolute bottom-3 right-3 rounded-lg border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1"
+                title="Deduct from this product"
+              >
+                <Trash2 className="h-3 w-3" /> Consume
+              </button>
+            </div>
           ))}
         </div>
+      )}
+
+      {/* Recent Consumptions */}
+      {recentConsumptions.length > 0 && (
+        <GlassCard hover={false}>
+          <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4 flex items-center gap-2">
+            <Trash2 className="h-4 w-4 text-red-400/70" /> Recent Consumptions
+          </h3>
+          <div className="space-y-2">
+            {recentConsumptions.map((c) => (
+              <div key={c.id} className="flex items-center justify-between rounded-xl border border-white/[0.04] p-3">
+                <div>
+                  <div className="text-sm font-medium">
+                    {c.variantName || c.productName}
+                    <span className="ml-2 text-red-400 font-mono">−{c.quantity}{c.unit ? ' ' + c.unit : ''}</span>
+                  </div>
+                  <div className="text-[11px] text-white/30">
+                    by {c.consumedBy}{c.reason ? ` · ${c.reason}` : ''}
+                  </div>
+                </div>
+                <div className="text-[10px] text-white/30 text-right">
+                  {new Date(c.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
       )}
 
       {/* ============== Group Detail Drawer (Variants list) ============== */}
@@ -1418,32 +1520,54 @@ function InventoryTab() {
                 <div className="flex-1 overflow-y-auto p-5 space-y-3">
                   <div className="text-[10px] uppercase tracking-wider text-white/30">Variants — click for purchase batches</div>
                   {openGroup.variants.map((v) => (
-                    <button
-                      key={v.key}
-                      onClick={() => setOpenVariant(v)}
-                      className="w-full text-left rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 hover:border-[#D4AF37]/30 hover:bg-white/[0.04] transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <div className="font-semibold capitalize">{v.name}</div>
-                          <div className="text-[11px] text-white/40 mt-0.5">
-                            {v.lines.length} purchase{v.lines.length !== 1 ? 's' : ''} ·
-                            {' '}avg {v.avgPrice.toFixed(2)} DT{v.unit ? `/${v.unit}` : ''}
+                    <div key={v.key} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4">
+                      <button
+                        onClick={() => setOpenVariant(v)}
+                        className="w-full text-left hover:opacity-90"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <div className="font-semibold capitalize">{v.name}</div>
+                            <div className="text-[11px] text-white/40 mt-0.5">
+                              {v.lines.length} purchase{v.lines.length !== 1 ? 's' : ''} ·
+                              {' '}avg {v.avgPrice.toFixed(2)} DT{v.unit ? `/${v.unit}` : ''}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-xl font-bold text-[#D4AF37]">
+                              {v.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-[10px] text-white/30">{v.unit || 'units'}</div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="text-xl font-bold text-[#D4AF37]">
-                            {v.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </div>
-                          <div className="text-[10px] text-white/30">{v.unit || 'units'}</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {v.suppliers.slice(0, 3).map((s) => (
+                            <span key={s} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">📦 {s}</span>
+                          ))}
                         </div>
+                      </button>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => setOpenVariant(v)}
+                          className="flex-1 rounded-lg border border-white/[0.08] py-1.5 text-[11px] text-white/60 hover:bg-white/[0.04] transition-colors"
+                        >
+                          View batches →
+                        </button>
+                        <button
+                          onClick={() => setConsumeTarget({
+                            productKey: openGroup.key,
+                            productName: openGroup.displayName,
+                            variantKey: v.key,
+                            variantName: v.name,
+                            unit: v.unit || openGroup.baseUnit,
+                            available: v.qty,
+                          })}
+                          className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-1.5 text-[11px] font-bold text-red-400 hover:bg-red-500/20 transition-colors flex items-center gap-1"
+                        >
+                          <Trash2 className="h-3 w-3" /> Consume
+                        </button>
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {v.suppliers.slice(0, 3).map((s) => (
-                          <span key={s} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/50">📦 {s}</span>
-                        ))}
-                      </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               </motion.div>
@@ -1516,6 +1640,84 @@ function InventoryTab() {
                 </div>
               </motion.div>
             </>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* ============== Consume Modal ============== */}
+      {createPortal(
+        <AnimatePresence>
+          {consumeTarget && (
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+              onClick={() => setConsumeTarget(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111] p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start gap-3 mb-5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 flex-shrink-0">
+                    <Trash2 className="h-5 w-5 text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold">Consume Stock</h3>
+                    <p className="text-xs text-white/40">
+                      {consumeTarget.variantName ? `From ${consumeTarget.variantName}` : `From ${consumeTarget.productName}`}
+                    </p>
+                  </div>
+                  <button onClick={() => setConsumeTarget(null)} className="text-white/40 hover:text-white">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 mb-4">
+                  <div className="text-[10px] uppercase tracking-wider text-white/40">Available</div>
+                  <div className="mt-0.5 font-mono text-lg font-bold text-[#D4AF37]">
+                    {consumeTarget.available.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {consumeTarget.unit && <span className="ml-1 text-xs text-white/40">{consumeTarget.unit}</span>}
+                  </div>
+                </div>
+
+                <label className="text-[10px] uppercase tracking-wider text-white/40">Quantity to consume</label>
+                <input
+                  type="number" step="0.01" min="0" max={consumeTarget.available}
+                  value={consumeQty}
+                  onChange={(e) => setConsumeQty(e.target.value)}
+                  placeholder={`Max ${consumeTarget.available}${consumeTarget.unit ? ' ' + consumeTarget.unit : ''}`}
+                  className="mt-1 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-base font-semibold text-white placeholder:text-white/20 outline-none focus:border-red-400/50"
+                  autoFocus
+                />
+
+                <label className="text-[10px] uppercase tracking-wider text-white/40 mt-4 block">Reason (optional)</label>
+                <input
+                  type="text"
+                  value={consumeReason}
+                  onChange={(e) => setConsumeReason(e.target.value)}
+                  placeholder="e.g. broken bottle, daily usage, spillage..."
+                  className="mt-1 w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none focus:border-red-400/50"
+                />
+
+                <div className="mt-6 flex gap-3">
+                  <button
+                    onClick={() => setConsumeTarget(null)}
+                    className="flex-1 rounded-xl border border-white/10 py-3 text-sm font-medium text-white/70 hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={performConsume}
+                    disabled={!consumeQty || parseFloat(consumeQty) <= 0 || parseFloat(consumeQty) > consumeTarget.available}
+                    className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-400 disabled:opacity-30"
+                  >
+                    Consume
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
           )}
         </AnimatePresence>,
         document.body
@@ -2645,6 +2847,135 @@ function InvoicesTab() {
         </AnimatePresence>,
         document.body
       )}
+    </div>
+  );
+}
+
+// ============================================================
+// Reports Tab (Shift Reports — filter + open printable rapport)
+// ============================================================
+
+function ReportsTab() {
+  const navigate = useNavigate();
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('day');
+  const [shift, setShift] = useState<'day' | 'night' | 'all'>('all');
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [cashier, setCashier] = useState<string>('All Cashiers');
+
+  useEffect(() => {
+    setStaff(getStaff());
+  }, []);
+
+  const cashiers = staff.filter((s) => s.role === 'Cashier' || s.role === 'Administrator');
+
+  const openReport = () => {
+    const params = new URLSearchParams({
+      cashier,
+      shift,
+      period,
+      date,
+    });
+    navigate(`/report?${params.toString()}`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0C0C0C] p-6">
+        <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-[#D4AF37]" /> Generate Shift Report
+        </h2>
+        <p className="text-sm text-white/40 mb-6">
+          Filter sales + consommation by cashier, shift, and period — then open the printable rapport.
+        </p>
+
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 block">Caisse</label>
+            <select
+              value={cashier}
+              onChange={(e) => setCashier(e.target.value)}
+              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
+            >
+              <option value="All Cashiers" className="bg-[#111]">All Cashiers</option>
+              {cashiers.map((s) => (
+                <option key={s.id} value={s.name} className="bg-[#111]">{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 block">Shift</label>
+            <select
+              value={shift}
+              onChange={(e) => setShift(e.target.value as 'day' | 'night' | 'all')}
+              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
+            >
+              <option value="all" className="bg-[#111]">All hours</option>
+              <option value="day" className="bg-[#111]">☀️ Jour (06:00–18:00)</option>
+              <option value="night" className="bg-[#111]">🌙 Nuit (18:00–06:00)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 block">Période</label>
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as 'day' | 'week' | 'month')}
+              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
+            >
+              <option value="day" className="bg-[#111]">📅 Jour</option>
+              <option value="week" className="bg-[#111]">🗓 Semaine</option>
+              <option value="month" className="bg-[#111]">📆 Mois</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-white/40 mb-1.5 block">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
+            />
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <GoldButton onClick={openReport}>
+            <FileText className="h-4 w-4" /> Open Rapport
+          </GoldButton>
+        </div>
+      </div>
+
+      {/* Quick presets */}
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0C0C0C] p-6">
+        <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4">Quick Presets</h3>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { label: 'Today — Day Shift', s: 'day' as const, p: 'day' as const },
+            { label: 'Today — Night Shift', s: 'night' as const, p: 'day' as const },
+            { label: 'This Week — All', s: 'all' as const, p: 'week' as const },
+            { label: 'This Month — All', s: 'all' as const, p: 'month' as const },
+            { label: 'This Week — Day Shifts', s: 'day' as const, p: 'week' as const },
+            { label: 'This Week — Night Shifts', s: 'night' as const, p: 'week' as const },
+          ].map((preset) => (
+            <button
+              key={preset.label}
+              onClick={() => {
+                const p = new URLSearchParams({
+                  cashier, shift: preset.s, period: preset.p, date,
+                });
+                navigate(`/report?${p.toString()}`);
+              }}
+              className="rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3 text-left text-sm hover:border-[#D4AF37]/30 hover:bg-white/[0.04] transition-colors flex items-center justify-between"
+            >
+              <span>{preset.label}</span>
+              <span className="text-[10px] text-[#D4AF37]/70">→</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
