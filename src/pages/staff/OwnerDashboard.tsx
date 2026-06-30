@@ -1169,6 +1169,20 @@ function StaffTab() {
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Face Registration Camera Scanner */}
+      {registeringStaff && (
+        <CameraScanner
+          mode="register"
+          staffName={registeringStaff.name}
+          onClose={() => setRegisteringStaff(null)}
+          onSuccess={handleFaceScanSuccess}
+          onError={(msg: string) => {
+            alert('Failed to register: ' + msg);
+            setRegisteringStaff(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2613,20 +2627,6 @@ function OrdersTab() {
           )}
         </AnimatePresence>,
         document.body
-      )}
-
-      {/* Face Registration Camera Scanner */}
-      {registeringStaff && (
-        <CameraScanner
-          mode="register"
-          staffName={registeringStaff.name}
-          onClose={() => setRegisteringStaff(null)}
-          onSuccess={handleFaceScanSuccess}
-          onError={(msg) => {
-            alert('Failed to register: ' + msg);
-            setRegisteringStaff(null);
-          }}
-        />
       )}
     </div>
   );
