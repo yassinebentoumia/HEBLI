@@ -1860,22 +1860,48 @@ function AnalyticsTab() {
 // AI Assistant Tab — Real LLM-powered Agent (multi-language)
 // ============================================================
 
+type ChatMsg = { role: 'user' | 'assistant'; content: string; ts?: number };
+const AI_HISTORY_KEY = 'hebli_ai_chat_history';
+const AI_HISTORY_MAX = 60; // keep last 60 messages
+
+function loadAIHistory(): ChatMsg[] | null {
+  try {
+    const raw = localStorage.getItem(AI_HISTORY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed.slice(-AI_HISTORY_MAX);
+  } catch { /* ignore */ }
+  return null;
+}
+
+function saveAIHistory(msgs: ChatMsg[]) {
+  try {
+    localStorage.setItem(AI_HISTORY_KEY, JSON.stringify(msgs.slice(-AI_HISTORY_MAX)));
+  } catch { /* ignore */ }
+}
+
 function AIAssistantTab() {
   const { user } = useApp();
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([
-    {
-      role: 'assistant',
-      content:
-        `Hi ${user?.name?.split(' ')[0] || 'boss'} 👋 — I'm **HEBLI AI**, your personal business agent.\n\n` +
-        `Ask me **anything** about your café — sales, staff performance, best products, inventory, suppliers, brewing tips… in **any language**. I'll analyze your live dashboard and reply intelligently.\n\n` +
-        `Try one of the suggestions below, or just type your question.`,
-    },
-  ]);
+  const welcomeMsg: ChatMsg = {
+    role: 'assistant',
+    content:
+      `Hi ${user?.name?.split(' ')[0] || 'boss'} — I'm **HEBLI AI**, your personal business agent.\n\n` +
+      `Ask me **anything** about your café — sales, staff performance, best products, inventory, suppliers, brewing tips… in **any language**. I'll analyze your live dashboard and reply intelligently.\n\n` +
+      `Try one of the suggestions below, or just type your question.`,
+    ts: Date.now(),
+  };
+
+  const [messages, setMessages] = useState<ChatMsg[]>(() => loadAIHistory() || [welcomeMsg]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Persist conversation every time it changes
+  useEffect(() => {
+    saveAIHistory(messages);
+  }, [messages]);
 
   // Check which LLM provider is configured
   useEffect(() => {
@@ -1905,7 +1931,7 @@ function AIAssistantTab() {
     const text = msg.trim();
     if (!text || loading) return;
     setError(null);
-    const newMessages = [...messages, { role: 'user' as const, content: text }];
+    const newMessages: ChatMsg[] = [...messages, { role: 'user', content: text, ts: Date.now() }];
     setMessages(newMessages);
     setInput('');
     setLoading(true);
@@ -1930,6 +1956,7 @@ function AIAssistantTab() {
         setError(msgErr);
         setMessages((prev) => [...prev, {
           role: 'assistant',
+          ts: Date.now(),
           content: msgErr.includes('No AI provider')
             ? `⚠️ **AI is not configured yet.**\n\nPick a **FREE** provider and set one env var on your server:\n\n🆓 **GROQ_API_KEY** → free + super fast (Llama 3.3 70B). Get it at console.groq.com/keys\n🆓 **OPENROUTER_API_KEY** → free Llama/DeepSeek/Qwen models. Get it at openrouter.ai/keys\n🆓 **GEMINI_API_KEY** → 1500 free/day. Get it at aistudio.google.com/apikey\n\n💳 Paid options: \`OPENAI_API_KEY\`, \`ANTHROPIC_API_KEY\`\n\nAdd it on Render → Environment → save. Redeploys automatically.`
             : `Sorry, I had trouble answering: ${msgErr}`,
@@ -1937,11 +1964,11 @@ function AIAssistantTab() {
       } else {
         const data = await res.json();
         if (data.provider) setProvider(data.provider);
-        setMessages((prev) => [...prev, { role: 'assistant', content: data.reply || '(empty reply)' }]);
+        setMessages((prev) => [...prev, { role: 'assistant', content: data.reply || '(empty reply)', ts: Date.now() }]);
       }
     } catch (e: any) {
       setError(String(e?.message || e));
-      setMessages((prev) => [...prev, { role: 'assistant', content: `Network error: ${e?.message || e}` }]);
+      setMessages((prev) => [...prev, { role: 'assistant', content: `Network error: ${e?.message || e}`, ts: Date.now() }]);
     } finally {
       setLoading(false);
     }
@@ -1960,10 +1987,14 @@ function AIAssistantTab() {
   };
 
   const resetChat = () => {
-    setMessages([{
+    if (!confirm('Clear this conversation? This cannot be undone.')) return;
+    const fresh: ChatMsg[] = [{
       role: 'assistant',
       content: `New conversation started. What can I help you with?`,
-    }]);
+      ts: Date.now(),
+    }];
+    setMessages(fresh);
+    saveAIHistory(fresh);
     setError(null);
   };
 

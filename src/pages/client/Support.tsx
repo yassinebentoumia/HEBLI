@@ -178,7 +178,7 @@ export default function Support() {
                             t.status === 'closed' ? 'border-white/10 bg-white/5 text-white/40' :
                             'border-amber-500/20 bg-amber-500/10 text-amber-400'
                           }`}>
-                            {t.status === 'accepted' ? '💬 Live' : t.status}
+                            {t.status === 'accepted' ? 'Live' : t.status}
                           </span>
                         </div>
                         <div className="mt-1 text-sm text-white/60">{t.subject}</div>

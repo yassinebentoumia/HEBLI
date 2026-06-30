@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react';
 import { motion, useScroll, useTransform } from 'framer-motion';
 import {
   Coffee, ShoppingBag, ChevronRight, Star, Sparkles, ArrowRight,
-  Shield, Menu as MenuIcon, X, MessageCircle,
+  Shield, Menu as MenuIcon, X, MessageCircle, BookOpen, Search as SearchIcon, Headphones,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getActiveProducts, getCategories } from '@/utils/store';
@@ -83,17 +83,21 @@ export default function Landing() {
             animate={{ opacity: 1, height: 'auto' }}
             className="sm:hidden border-t border-white/[0.06] bg-[#0A0A0A] px-4 py-4 space-y-3"
           >
-            <button onClick={() => { navigate('/client/menu'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
-              📋 {t('nav.menu')}
+            <button onClick={() => { navigate('/client/menu'); setMobileMenuOpen(false); }} className="flex w-full items-center gap-3 text-start text-sm text-white/70 hover:text-white py-2.5 px-2 rounded-lg hover:bg-white/[0.03]">
+              <BookOpen className="h-4 w-4 text-[#D4AF37]/70" />
+              {t('nav.menu')}
             </button>
-            <button onClick={() => { navigate('/client/track'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
-              🔍 {t('nav.track')}
+            <button onClick={() => { navigate('/client/track'); setMobileMenuOpen(false); }} className="flex w-full items-center gap-3 text-start text-sm text-white/70 hover:text-white py-2.5 px-2 rounded-lg hover:bg-white/[0.03]">
+              <SearchIcon className="h-4 w-4 text-[#D4AF37]/70" />
+              {t('nav.track')}
             </button>
-            <button onClick={() => { navigate('/client/support'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-white/70 hover:text-white py-2">
-              💬 {t('nav.support')}
+            <button onClick={() => { navigate('/client/support'); setMobileMenuOpen(false); }} className="flex w-full items-center gap-3 text-start text-sm text-white/70 hover:text-white py-2.5 px-2 rounded-lg hover:bg-white/[0.03]">
+              <Headphones className="h-4 w-4 text-[#D4AF37]/70" />
+              {t('nav.support')}
             </button>
-            <button onClick={() => { navigate('/staff'); setMobileMenuOpen(false); }} className="block w-full text-start text-sm text-[#D4AF37] hover:text-amber-300 py-2">
-              🛡️ {t('nav.staff')}
+            <button onClick={() => { navigate('/staff'); setMobileMenuOpen(false); }} className="flex w-full items-center gap-3 text-start text-sm text-[#D4AF37] hover:text-amber-300 py-2.5 px-2 rounded-lg hover:bg-white/[0.03]">
+              <Shield className="h-4 w-4" />
+              {t('nav.staff')}
             </button>
           </motion.div>
         )}
@@ -291,13 +295,14 @@ export default function Landing() {
               whileHover={{ scale: 1.04 }}
               whileTap={{ scale: 0.96 }}
               onClick={() => setActiveCategory('All')}
-              className={`rounded-full px-4 py-2 text-[11px] font-semibold tracking-[0.1em] uppercase transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold tracking-[0.1em] uppercase transition-colors ${
                 activeCategory === 'All'
                   ? 'bg-[#D4AF37] text-black shadow-[0_8px_24px_-8px_rgba(212,175,55,0.6)]'
                   : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
               }`}
             >
-              ✦ {t('menu.all')}
+              <Sparkles className="h-3.5 w-3.5" />
+              {t('menu.all')}
             </motion.button>
             {categories.map((cat) => (
               <motion.button
@@ -335,14 +340,30 @@ export default function Landing() {
                   <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-tr from-[#D4AF37]/0 to-[#D4AF37]/0 opacity-0 transition-opacity duration-500 group-hover:from-[#D4AF37]/10 group-hover:opacity-100" />
 
                   <div className="relative">
-                    <div className="mb-4 flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#D4AF37]/15 via-amber-600/[0.04] to-transparent relative">
+                    <div className="mb-4 relative flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#D4AF37]/15 via-amber-600/[0.04] to-transparent">
+                      {/* Luxury ornamental rings (only when no image) */}
+                      {!product.image && (
+                        <>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="h-[85%] w-[85%] rounded-full border border-[#D4AF37]/10" />
+                          </div>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="h-[60%] w-[60%] rounded-full border border-[#D4AF37]/15" />
+                          </div>
+                          {/* Corner ornaments */}
+                          <div className="absolute top-3 left-3 h-2 w-2 border-t border-l border-[#D4AF37]/25" />
+                          <div className="absolute top-3 right-3 h-2 w-2 border-t border-r border-[#D4AF37]/25" />
+                          <div className="absolute bottom-3 left-3 h-2 w-2 border-b border-l border-[#D4AF37]/25" />
+                          <div className="absolute bottom-3 right-3 h-2 w-2 border-b border-r border-[#D4AF37]/25" />
+                        </>
+                      )}
                       {product.image ? (
                         <img src={product.image} alt={product.name} className="h-full w-full rounded-xl object-cover transition-transform duration-700 group-hover:scale-110" />
                       ) : (
                         <CategoryIcon
                           category={product.category}
-                          className="h-16 w-16 text-[#D4AF37]/40 transition-all duration-700 group-hover:text-[#D4AF37]/70 group-hover:scale-110 group-hover:rotate-3"
-                          strokeWidth={1.2}
+                          className="relative h-14 w-14 text-[#D4AF37]/60 transition-all duration-700 group-hover:text-[#D4AF37]/90 group-hover:scale-110"
+                          strokeWidth={1.1}
                         />
                       )}
                     </div>

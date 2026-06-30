@@ -254,13 +254,14 @@ export default function Menu() {
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={() => setActiveCategory('All')}
-            className={`rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium tracking-wider uppercase transition-all ${
               activeCategory === 'All'
                 ? 'bg-[#D4AF37] text-black shadow-lg shadow-[#D4AF37]/20'
                 : 'border border-white/[0.08] text-white/50 hover:text-white hover:border-white/20'
             }`}
           >
-            ✦ {t('menu.all')}
+            <Sparkles className="h-3.5 w-3.5" />
+            {t('menu.all')}
           </motion.button>
           {categories.map((cat) => (
             <motion.button
@@ -299,17 +300,32 @@ export default function Menu() {
                   <div className="absolute inset-0 bg-gradient-to-br from-[#D4AF37]/0 to-[#D4AF37]/0 group-hover:from-[#D4AF37]/5 group-hover:to-amber-600/5 transition-all duration-500" />
 
                   <div className="mb-4 flex h-40 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5 overflow-hidden relative z-10">
+                    {/* Luxury ornaments when no image */}
+                    {!product.image && (
+                      <>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="h-[80%] w-[80%] rounded-full border border-[#D4AF37]/10" />
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="h-[55%] w-[55%] rounded-full border border-[#D4AF37]/15" />
+                        </div>
+                        <div className="absolute top-2.5 left-2.5 h-2 w-2 border-t border-l border-[#D4AF37]/25" />
+                        <div className="absolute top-2.5 right-2.5 h-2 w-2 border-t border-r border-[#D4AF37]/25" />
+                        <div className="absolute bottom-2.5 left-2.5 h-2 w-2 border-b border-l border-[#D4AF37]/25" />
+                        <div className="absolute bottom-2.5 right-2.5 h-2 w-2 border-b border-r border-[#D4AF37]/25" />
+                      </>
+                    )}
                     {product.image ? (
                       <img src={product.image} alt={product.name} className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-110" />
                     ) : (
                       <motion.div
                         animate={addedId === product.id ? { scale: [1, 1.2, 1] } : {}}
-                        className="transition-transform duration-500 group-hover:scale-110"
+                        className="relative transition-transform duration-500 group-hover:scale-110"
                       >
                         <CategoryIcon
                           category={product.category}
-                          className="h-14 w-14 text-[#D4AF37]/50 group-hover:text-[#D4AF37]/80 transition-colors"
-                          strokeWidth={1.2}
+                          className="h-12 w-12 text-[#D4AF37]/60 group-hover:text-[#D4AF37]/90 transition-colors"
+                          strokeWidth={1.1}
                         />
                       </motion.div>
                     )}
@@ -454,8 +470,8 @@ export default function Menu() {
                           layout
                           className="flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#111] p-3"
                         >
-                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.03] text-xl">
-                            ☕
+                          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D4AF37]/10">
+                            <Coffee className="h-5 w-5 text-[#D4AF37]/70" strokeWidth={1.4} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{item.name}</div>
