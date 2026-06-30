@@ -1,46 +1,44 @@
 // ============================================================
-// HEBLI – Professional Staff & Owner Login
+// HEBLI – Professional Staff & Owner Login (Camera Face Scan)
 // ============================================================
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, ArrowLeft, AlertCircle, User, ScanFace } from 'lucide-react';
+import { Lock, ArrowLeft, ScanFace, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import { useApp } from '@/contexts/AppContext';
 import { getStaff } from '@/utils/store';
-import { verifyBiometric, getStoredCredential } from '@/utils/faceid';
+import CameraScanner from '@/components/CameraScanner';
 
-type View = 'selection' | 'owner-pin' | 'scanning';
+const FACE_STORAGE_PREFIX = 'hebli_face_scan_';
 
 export default function StaffLogin() {
   const navigate = useNavigate();
   const { login } = useApp();
-  const [view, setView] = useState<View>('selection');
+  const [view, setView] = useState<'selection' | 'owner-pin'>('selection');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeStaff, setActiveStaff] = useState<{ id: string; name: string; role: string } | null>(null);
+  
+  // Camera Scanner State
+  const [scanningStaff, setScanningStaff] = useState<{ id: string; name: string; role: string } | null>(null);
 
   const staffList = getStaff().filter((s) => s.active);
 
   const handleOwnerLogin = async () => {
-    if (pin !== '9999') {
-      // Fallback to DB PIN if 9999 isn't hardcoded, but user requested 9999
-      const owner = staffList.find(s => s.role === 'Administrator');
-      if (owner && owner.pin !== pin) {
-        setError('Incorrect Owner PIN');
-        return;
-      }
-    }
     setLoading(true);
+    setError('');
     try {
       const owner = staffList.find(s => s.role === 'Administrator');
-      if (owner) {
-        await login(owner.pin); // Login with actual DB PIN to satisfy context
+      if (pin === '9999' && owner) {
+        await login(owner.pin);
+        navigate('/owner');
+      } else if (owner && owner.pin === pin) {
+        await login(pin);
         navigate('/owner');
       } else {
-        setError('No Owner account found');
+        setError('Incorrect Owner PIN');
       }
     } catch {
       setError('Login failed');
@@ -49,50 +47,27 @@ export default function StaffLogin() {
     }
   };
 
-  const handleStaffScan = async (staff: { id: string; name: string; role: string }) => {
-    const hasBio = getStoredCredential(staff.id);
-    if (!hasBio) {
-      setError(`Face ID not registered for ${staff.name}. Ask Owner to set it up.`);
-      return;
-    }
-
-    setActiveStaff(staff);
-    setView('scanning');
-    setError('');
-
+  const handleFaceScanSuccess = async (staff: { id: string; name: string; role: string }) => {
+    setLoading(true);
     try {
-      // Simulate a "Scanning..." delay for professional feel
-      await new Promise(r => setTimeout(r, 1500));
-      
-      const success = await verifyBiometric(staff.id);
-      if (success) {
-        await login(staff.id === 'admin' ? '9999' : staff.id); // Hacky login trigger, better to use PIN internally or bypass
-        // Actually, we need to log them in. Since we verified biometrics, we trust them.
-        // We'll call login with a dummy or their PIN if we stored it, but for now:
-        // We can just set the user manually if we had access to context setter, but let's use login('9999') if owner, else we need a way.
-        // Wait, `login` in AppContext checks PIN. We don't have the staff PIN here easily unless we pass it.
-        // Let's just use the staff's PIN from the DB if we can find it? No, PIN is secret.
-        // Better: The `login` function in AppContext should accept a staff object or we bypass.
-        // For this demo, we will assume the `login` function can be tricked or we just navigate.
-        // Actually, let's just call `login` with a known value or modify AppContext. 
-        // SIMPLIFICATION: We will just navigate. The AppContext `user` might be null though.
-        // Let's use a trick: login(staff.pin) -- wait, we don't have staff.pin here easily without fetching all staff.
-        const allStaff = getStaff();
-        const realStaff = allStaff.find(s => s.id === staff.id);
-        if (realStaff) {
-           await login(realStaff.pin);
-           if (realStaff.role === 'Barista') navigate('/barista');
-           else if (realStaff.role === 'Cashier') navigate('/cashier');
-        }
-      } else {
-        setError('Face not recognized');
-        setView('selection');
+      // Find real staff object to get PIN for context login
+      const allStaff = getStaff();
+      const realStaff = allStaff.find(s => s.id === staff.id);
+      if (realStaff) {
+        await login(realStaff.pin);
+        if (realStaff.role === 'Barista') navigate('/barista');
+        else if (realStaff.role === 'Cashier') navigate('/cashier');
       }
-    } catch (e: any) {
-      console.error(e);
-      setError(e.message || 'Scan failed');
-      setView('selection');
+    } catch (e) {
+      setError('Login failed after scan.');
+    } finally {
+      setLoading(false);
+      setScanningStaff(null);
     }
+  };
+
+  const getSavedFace = (staffId: string) => {
+    return localStorage.getItem(FACE_STORAGE_PREFIX + staffId);
   };
 
   return (
@@ -124,6 +99,7 @@ export default function StaffLogin() {
                 )}
 
                 <div className="space-y-4">
+                  {/* Owner Button */}
                   <button onClick={() => setView('owner-pin')} className="group relative w-full overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 text-left transition-all hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5">
                     <div className="flex items-center gap-4">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#D4AF37]/10 text-[#D4AF37]">
@@ -138,31 +114,35 @@ export default function StaffLogin() {
 
                   <div className="relative py-2">
                     <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/[0.06]"></div></div>
-                    <div className="relative flex justify-center text-xs uppercase tracking-widest text-white/20"><span className="bg-[#111] px-2">Staff</span></div>
+                    <div className="relative flex justify-center text-xs uppercase tracking-widest text-white/20"><span className="bg-[#111] px-2">Staff Face ID</span></div>
                   </div>
 
+                  {/* Staff List */}
                   <div className="grid grid-cols-1 gap-3 max-h-[40vh] overflow-y-auto pr-1 custom-scrollbar">
                     {staffList.filter(s => s.role !== 'Administrator').map((staff) => {
-                      const hasBio = getStoredCredential(staff.id);
+                      const hasFace = !!getSavedFace(staff.id);
                       return (
                         <button 
                           key={staff.id} 
-                          onClick={() => handleStaffScan(staff)}
-                          disabled={!hasBio}
+                          onClick={() => setScanningStaff(staff)}
                           className={`group relative flex items-center gap-4 rounded-xl border p-3 text-left transition-all ${
-                            hasBio 
+                            hasFace 
                               ? 'border-white/[0.08] bg-white/[0.02] hover:border-[#D4AF37]/50 hover:bg-[#D4AF37]/5' 
                               : 'border-white/[0.02] bg-white/[0.01] opacity-50 cursor-not-allowed'
                           }`}
                         >
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${hasBio ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-white/20'}`}>
-                            {hasBio ? <ScanFace className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-full ${hasFace ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-white/20'}`}>
+                            <ScanFace className="h-5 w-5" />
                           </div>
                           <div className="flex-1">
                             <div className="font-semibold text-sm text-white">{staff.name}</div>
                             <div className="text-[10px] uppercase tracking-wider text-white/40">{staff.role}</div>
                           </div>
-                          {hasBio && <div className="text-[10px] font-bold text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-opacity">SCAN &rarr;</div>}
+                          {hasFace ? (
+                            <div className="text-[10px] font-bold text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-opacity">SCAN &rarr;</div>
+                          ) : (
+                            <div className="text-[9px] text-red-400">No Face ID</div>
+                          )}
                         </button>
                       );
                     })}
@@ -204,32 +184,24 @@ export default function StaffLogin() {
               </motion.div>
             )}
 
-            {/* VIEW 3: Scanning Animation */}
-            {view === 'scanning' && activeStaff && (
-              <motion.div key="scan" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="py-8 flex flex-col items-center">
-                <div className="relative mb-8">
-                  {/* Pulsing Rings */}
-                  <div className="absolute inset-0 rounded-full border border-[#D4AF37]/30 animate-ping" style={{ animationDuration: '2s' }}></div>
-                  <div className="absolute -inset-4 rounded-full border border-[#D4AF37]/10 animate-pulse"></div>
-                  
-                  {/* Icon */}
-                  <div className="relative flex h-32 w-32 items-center justify-center rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/30 backdrop-blur-xl">
-                    <ScanFace className="h-16 w-16 text-[#D4AF37]" />
-                  </div>
-                </div>
-                
-                <h2 className="text-2xl font-bold text-white mb-2">Scanning Biometrics</h2>
-                <p className="text-sm text-white/50 text-center max-w-[250px]">
-                  Please look at the camera, {activeStaff.name.split(' ')[0]}.<br/>Keep your face within the frame.
-                </p>
-
-                {error && <div className="mt-6 text-xs text-red-400 bg-red-500/10 px-4 py-2 rounded-lg">{error}</div>}
-              </motion.div>
-            )}
-
           </AnimatePresence>
         </GlassCard>
       </motion.div>
+
+      {/* Camera Scanner Modal */}
+      {scanningStaff && (
+        <CameraScanner
+          mode="login"
+          staffName={scanningStaff.name}
+          savedFaceData={getSavedFace(scanningStaff.id)}
+          onClose={() => setScanningStaff(null)}
+          onSuccess={() => handleFaceScanSuccess(scanningStaff)}
+          onError={(msg) => {
+            setError(msg);
+            setScanningStaff(null);
+          }}
+        />
+      )}
     </div>
   );
 }

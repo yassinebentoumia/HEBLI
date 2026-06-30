@@ -94,6 +94,7 @@ import {
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
 import CategoryIcon from '@/components/CategoryIcon';
+import CameraScanner from '@/components/CameraScanner';
 
 function CategoryIconPreview({ name }: { name: string }) {
   return <CategoryIcon category={name || 'Coffee'} className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.4} />;
@@ -785,8 +786,8 @@ function StaffTab() {
   const [chatStaff, setChatStaff] = useState<Staff | null>(null);
   // Salary draft per staff (DT per MINUTE)
   const [salaryDrafts, setSalaryDrafts] = useState<Record<string, string>>({});
-  // Face ID registration
-  const [registeringFaceId, setRegisteringFaceId] = useState<string | null>(null);
+  // Face ID Camera Scanner
+  const [registeringStaff, setRegisteringStaff] = useState<Staff | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
   const monthKey = today.slice(0, 7); // YYYY-MM
@@ -798,17 +799,11 @@ function StaffTab() {
     return () => clearInterval(int);
   }, []);
 
-  const handleRegisterFaceId = async (s: Staff) => {
-    setRegisteringFaceId(s.id);
-    try {
-      const { registerBiometric } = await import('@/utils/faceid');
-      await registerBiometric(s.id, s.name);
-      addLog('Face ID Registered', `Face ID registered for ${s.name}`);
-      alert(`Face ID successfully registered for ${s.name}!`);
-    } catch (e: any) {
-      alert('Failed to register Face ID: ' + (e.message || 'Unknown error'));
-    } finally {
-      setRegisteringFaceId(null);
+  const handleFaceScanSuccess = (faceData: string) => {
+    if (registeringStaff) {
+      localStorage.setItem('hebli_face_scan_' + registeringStaff.id, faceData);
+      addLog('Face ID Registered', `Camera face registered for ${registeringStaff.name}`);
+      setRegisteringStaff(null);
     }
   };
 
@@ -1023,12 +1018,12 @@ function StaffTab() {
                 {/* Face ID Registration */}
                 <div className="mt-2">
                   <button 
-                    onClick={() => handleRegisterFaceId(s)} 
-                    disabled={registeringFaceId === s.id}
+                    onClick={() => setRegisteringStaff(s)} 
+                    disabled={registeringStaff?.id === s.id}
                     className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-500/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <ScanFace className="h-3.5 w-3.5" /> 
-                    {registeringFaceId === s.id ? 'Registering...' : 'Register Face ID'}
+                    {registeringStaff?.id === s.id ? 'Registering...' : 'Register Face ID'}
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2">
@@ -2618,6 +2613,20 @@ function OrdersTab() {
           )}
         </AnimatePresence>,
         document.body
+      )}
+
+      {/* Face Registration Camera Scanner */}
+      {registeringStaff && (
+        <CameraScanner
+          mode="register"
+          staffName={registeringStaff.name}
+          onClose={() => setRegisteringStaff(null)}
+          onSuccess={handleFaceScanSuccess}
+          onError={(msg) => {
+            alert('Failed to register: ' + msg);
+            setRegisteringStaff(null);
+          }}
+        />
       )}
     </div>
   );
