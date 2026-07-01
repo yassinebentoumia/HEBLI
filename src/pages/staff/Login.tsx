@@ -66,8 +66,11 @@ export default function StaffLogin() {
     }
   };
 
-  const getSavedFace = (staffId: string) => {
-    return localStorage.getItem(FACE_STORAGE_PREFIX + staffId);
+  const getSavedFace = (staffId: string): number[] | null => {
+    try {
+      const raw = localStorage.getItem(FACE_STORAGE_PREFIX + staffId);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   };
 
   return (
@@ -193,7 +196,7 @@ export default function StaffLogin() {
         <CameraScanner
           mode="login"
           staffName={scanningStaff.name}
-          savedFaceData={getSavedFace(scanningStaff.id)}
+          savedFaceDescriptor={getSavedFace(scanningStaff.id)}
           onClose={() => setScanningStaff(null)}
           onSuccess={() => handleFaceScanSuccess(scanningStaff)}
           onError={(msg) => {

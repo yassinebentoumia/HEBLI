@@ -799,10 +799,10 @@ function StaffTab() {
     return () => clearInterval(int);
   }, []);
 
-  const handleFaceScanSuccess = (faceData: string) => {
+  const handleFaceScanSuccess = (faceDescriptor: number[]) => {
     if (registeringStaff) {
-      localStorage.setItem('hebli_face_scan_' + registeringStaff.id, faceData);
-      addLog('Face ID Registered', `Camera face registered for ${registeringStaff.name}`);
+      localStorage.setItem('hebli_face_scan_' + registeringStaff.id, JSON.stringify(faceDescriptor));
+      addLog('Face ID Registered', `AI face descriptor registered for ${registeringStaff.name}`);
       setRegisteringStaff(null);
     }
   };
