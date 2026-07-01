@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@vladmandic/face-api": "^1.7.15",
     "clsx": "2.1.1",
     "cors": "^2.8.6",
     "date-fns": "^4.4.0",

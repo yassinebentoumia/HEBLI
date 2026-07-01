@@ -50,7 +50,6 @@ export default defineConfig({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB limit for AI library
         globPatterns: ["**/*.{js,css,html,png,svg,ico,webp,woff2}"],
         runtimeCaching: [
           {
@@ -81,6 +80,14 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+    },
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 });
