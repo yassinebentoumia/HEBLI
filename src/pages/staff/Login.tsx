@@ -1,241 +1,155 @@
 // ============================================================
-// HEBLI – Professional Full-Screen Staff Login
+// HEBLI – Staff Login Page
 // ============================================================
 
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Delete, Fingerprint, User } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Lock, ArrowLeft, Coffee, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import GoldButton from '@/components/ui/GoldButton';
+import GlassCard from '@/components/ui/GlassCard';
 import { useApp } from '@/contexts/AppContext';
-import { getStaff } from '@/utils/store';
-import { verifyBiometric, getStoredCredential } from '@/utils/faceid';
 
 export default function StaffLogin() {
   const navigate = useNavigate();
-  const { login } = useApp();
+  const { login, syncStatus } = useApp();
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
-  const [showFaceSelector, setShowFaceSelector] = useState(false);
-  const [scanningStaff, setScanningStaff] = useState<{ id: string; name: string; role: string } | null>(null);
-  const [scanError, setScanError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const staffList = getStaff().filter((s) => s.active);
-
-  // Handle PIN Input
-  const handleNumberClick = (num: string) => {
-    if (pin.length < 4) {
-      const newPin = pin + num;
-      setPin(newPin);
-      setError('');
-      
-      // Auto-submit when 4 digits reached
-      if (newPin.length === 4) {
-        setTimeout(() => handlePinSubmit(newPin), 300);
-      }
-    }
-  };
-
-  const handleBackspace = () => {
-    setPin(pin.slice(0, -1));
+  const handleLogin = async () => {
     setError('');
-  };
-
-  const handlePinSubmit = async (submittedPin: string) => {
-    // 1. Check Owner PIN (9999)
-    if (submittedPin === '9999') {
-      const owner = staffList.find(s => s.role === 'Administrator');
-      if (owner) {
-        await login(owner.pin); // Use actual DB PIN for context
-        navigate('/owner');
+    setLoading(true);
+    try {
+      const staff = await (login(pin) as unknown as Promise<typeof login extends (...args: any) => infer R ? R : never> | any);
+      setLoading(false);
+      if (!staff) {
+        setError('Invalid PIN. Please try again.');
         return;
       }
-    }
-
-    // 2. Check Staff PIN -> Trigger Face ID
-    const staff = staffList.find(s => s.pin === submittedPin && s.role !== 'Administrator');
-    if (staff) {
-      const hasBio = getStoredCredential(staff.id);
-      if (hasBio) {
-        // Trigger Face ID verification
-        try {
-          const success = await verifyBiometric(staff.id);
-          if (success) {
-            await login(staff.pin);
-            if (staff.role === 'Barista') navigate('/barista');
-            else if (staff.role === 'Cashier') navigate('/cashier');
-          } else {
-            setError('Face ID failed');
-            setPin('');
-          }
-        } catch (e: any) {
-          setError('Face ID error');
-          setPin('');
-        }
-      } else {
-        setError('Face ID not registered');
-        setPin('');
+      if (!staff.active) {
+        setError('This account has been suspended.');
+        return;
       }
-    } else {
-      setError('Incorrect PIN');
-      setTimeout(() => setPin(''), 500); // Clear after animation
-    }
-  };
-
-  const handleFaceScanSelect = async (staff: { id: string; name: string; role: string }) => {
-    setScanningStaff(staff);
-    setScanError('');
-    try {
-      const success = await verifyBiometric(staff.id);
-      if (success) {
-        await login(staff.id === 'admin' ? '9999' : staff.id); // Hack for context
-        // Real login
-        const allStaff = getStaff();
-        const realStaff = allStaff.find(s => s.id === staff.id);
-        if (realStaff) {
-           await login(realStaff.pin);
-           if (realStaff.role === 'Barista') navigate('/barista');
-           else if (realStaff.role === 'Cashier') navigate('/cashier');
-        }
+      switch (staff.role) {
+        case 'Barista':
+          navigate('/barista');
+          break;
+        case 'Cashier':
+          navigate('/cashier');
+          break;
+        case 'Administrator':
+          navigate('/owner');
+          break;
       }
-    } catch (e: any) {
-      setScanError(e.message || 'Scan failed');
-    } finally {
-      setScanningStaff(null);
+    } catch {
+      setLoading(false);
+      setError('Login failed. Try again.');
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black text-white overflow-hidden">
-      {/* Background Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(212,175,55,0.15)_0%,_transparent_50%)] pointer-events-none" />
+    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-4 relative">
+      {/* Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(212,175,55,0.06)_0%,_transparent_70%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.02]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+            backgroundSize: '50px 50px',
+          }}
+        />
+      </div>
 
-      <div className="relative z-10 flex flex-col items-center w-full max-w-md px-6 h-full justify-center">
-        
-        {/* Header */}
-        <div className="mb-12 text-center">
-          <h1 className="text-3xl font-black tracking-tight mb-2">
-            <span className="text-[#D4AF37]">HEBLI</span> <span className="text-white">Staff</span>
-          </h1>
-          <p className="text-white/50 text-sm">Enter your secure PIN</p>
-        </div>
+      <motion.div
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+        className="w-full max-w-md relative z-10"
+      >
+        {/* Back button */}
+        <button
+          onClick={() => navigate('/')}
+          className="mb-6 inline-flex items-center gap-2 text-sm text-white/40 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Home
+        </button>
 
-        {/* PIN Dots (4 digits) */}
-        <div className="flex gap-4 mb-12">
-          {[0, 1, 2, 3].map((i) => (
-            <motion.div
-              key={i}
-              animate={{ 
-                scale: i === pin.length ? 1.2 : 1,
-                backgroundColor: i < pin.length ? '#D4AF37' : 'rgba(255,255,255,0.2)'
-              }}
-              className="h-4 w-4 rounded-full transition-colors duration-200"
-            />
-          ))}
-        </div>
+        <GlassCard className="text-center">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D4AF37]/10"
+          >
+            <Shield className="h-8 w-8 text-[#D4AF37]" />
+          </motion.div>
 
-        {/* Error Message */}
-        <div className="h-6 mb-4">
-          <AnimatePresence>
+          <h2 className="text-2xl font-bold tracking-tight">
+            <span className="text-[#D4AF37]">HEBLI</span> Staff
+          </h2>
+          <p className="mt-2 text-sm text-white/40">Enter your secure PIN to access the dashboard.</p>
+
+          {/* Sync status indicator */}
+          <div className={`mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-semibold tracking-wider uppercase ${
+            syncStatus === 'online' ? 'bg-green-500/10 text-green-400' :
+            syncStatus === 'offline' ? 'bg-red-500/10 text-red-400' :
+            'bg-amber-500/10 text-amber-400'
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              syncStatus === 'online' ? 'bg-green-400 animate-pulse' :
+              syncStatus === 'offline' ? 'bg-red-400' :
+              'bg-amber-400 animate-pulse'
+            }`} />
+            {syncStatus === 'online' ? 'Live sync · all devices' :
+             syncStatus === 'offline' ? 'Offline — cannot sync' :
+             'Connecting...'}
+          </div>
+
+          <div className="mt-8">
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
+              <input
+                type="password"
+                placeholder="Enter PIN"
+                value={pin}
+                onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); setError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                maxLength={4}
+                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] py-3.5 pl-11 pr-4 text-center text-2xl tracking-[0.5em] text-white placeholder:text-white/10 outline-none focus:border-[#D4AF37]/50 transition-colors"
+              />
+            </div>
+
             {error && (
-              <motion.p 
-                initial={{ opacity: 0, y: -10 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                exit={{ opacity: 0 }}
-                className="text-red-400 text-sm font-medium"
+              <motion.p
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-3 text-sm text-red-400"
               >
                 {error}
               </motion.p>
             )}
-          </AnimatePresence>
-        </div>
 
-        {/* Numeric Keypad */}
-        <div className="grid grid-cols-3 gap-6 w-full max-w-[320px] mb-8">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
-            <button
-              key={num}
-              onClick={() => handleNumberClick(num.toString())}
-              className="h-20 w-20 rounded-full bg-white/5 border border-white/10 text-2xl font-medium hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all flex items-center justify-center mx-auto"
+            <GoldButton
+              className="mt-6 w-full"
+              onClick={handleLogin}
+              disabled={pin.length < 4 || loading}
             >
-              {num}
-            </button>
-          ))}
-          <div className="h-20 w-20 mx-auto" /> {/* Empty spacer */}
-          <button
-            onClick={() => handleNumberClick('0')}
-            className="h-20 w-20 rounded-full bg-white/5 border border-white/10 text-2xl font-medium hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all flex items-center justify-center mx-auto"
-          >
-            0
-          </button>
-          <button
-            onClick={handleBackspace}
-            className="h-20 w-20 rounded-full flex items-center justify-center mx-auto text-white/70 hover:text-white hover:bg-white/5 active:scale-95 transition-all"
-          >
-            <Delete className="h-7 w-7" />
-          </button>
-        </div>
-
-        {/* Scan Face ID Button */}
-        <button
-          onClick={() => setShowFaceSelector(true)}
-          className="mt-4 flex items-center gap-2 text-[#D4AF37] hover:text-amber-400 transition-colors text-sm font-semibold uppercase tracking-wider"
-        >
-          <Fingerprint className="h-5 w-5" />
-          Scan Face ID
-        </button>
-
-      </div>
-
-      {/* Face ID Staff Selector Modal */}
-      {showFaceSelector && (
-        <div className="absolute inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="w-full max-w-sm bg-[#111] rounded-3xl border border-white/10 p-6">
-            <h3 className="text-lg font-bold text-white mb-4 text-center">Select Staff to Scan</h3>
-            <div className="space-y-2 max-h-[60vh] overflow-y-auto">
-              {staffList.filter(s => s.role !== 'Administrator').map((staff) => {
-                const hasBio = getStoredCredential(staff.id);
-                return (
-                  <button
-                    key={staff.id}
-                    onClick={() => { setShowFaceSelector(false); handleFaceScanSelect(staff); }}
-                    disabled={!hasBio}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      hasBio 
-                        ? 'border-white/10 bg-white/5 hover:bg-white/10' 
-                        : 'border-white/5 bg-white/2 opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    <div className="h-10 w-10 rounded-full bg-[#D4AF37]/20 flex items-center justify-center text-[#D4AF37]">
-                      <User className="h-5 w-5" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <div className="font-semibold text-sm text-white">{staff.name}</div>
-                      <div className="text-[10px] text-white/40 uppercase">{staff.role}</div>
-                    </div>
-                    {!hasBio && <span className="text-[10px] text-red-400">No Face ID</span>}
-                  </button>
-                );
-              })}
-            </div>
-            <button 
-              onClick={() => setShowFaceSelector(false)}
-              className="w-full mt-4 py-3 text-sm text-white/50 hover:text-white"
-            >
-              Cancel
-            </button>
+              {loading ? (
+                <span className="flex items-center gap-2">
+                  <Coffee className="h-4 w-4 animate-spin" />
+                  Verifying...
+                </span>
+              ) : (
+                'Access Dashboard'
+              )}
+            </GoldButton>
           </div>
-        </div>
-      )}
-
-      {/* Actual Biometric Scanner Overlay (Hidden logic, triggers native prompt) */}
-      {scanningStaff && (
-        <div className="absolute inset-0 z-[70] bg-black/95 flex flex-col items-center justify-center p-6">
-          <div className="h-20 w-20 rounded-full border-4 border-[#D4AF37] border-t-transparent animate-spin mb-6" />
-          <h3 className="text-xl font-bold text-white mb-2">Verifying Identity</h3>
-          <p className="text-white/50 text-center">Please look at your device, {scanningStaff.name}...</p>
-          {scanError && <p className="text-red-400 mt-4">{scanError}</p>}
-        </div>
-      )}
+        </GlassCard>
+      </motion.div>
     </div>
   );
 }

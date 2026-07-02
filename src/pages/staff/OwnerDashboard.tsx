@@ -34,7 +34,6 @@ import {
   Star,
   Calendar,
   Printer,
-  ScanFace,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -785,8 +784,6 @@ function StaffTab() {
   const [chatStaff, setChatStaff] = useState<Staff | null>(null);
   // Salary draft per staff (DT per MINUTE)
   const [salaryDrafts, setSalaryDrafts] = useState<Record<string, string>>({});
-  // Face ID Camera Scanner
-  const [registeringStaff, setRegisteringStaff] = useState<Staff | null>(null);
 
   const today = new Date().toISOString().split('T')[0];
   const monthKey = today.slice(0, 7); // YYYY-MM
@@ -797,24 +794,6 @@ function StaffTab() {
     const int = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(int);
   }, []);
-
-  const handleRegisterFaceId = async (s: Staff) => {
-    setRegisteringStaff(s);
-    try {
-      const { registerBiometric } = await import('@/utils/faceid');
-      await registerBiometric(s.id, s.name);
-      addLog('Face ID Registered', `Face ID registered for ${s.name}`);
-      alert(`Face ID successfully registered for ${s.name}!`);
-    } catch (e: any) {
-      let msg = 'Failed to register Face ID. ';
-      if (e.message.includes('NotAllowedError')) msg += 'Registration cancelled or timed out.';
-      else if (e.message.includes('SecurityError')) msg += 'Face ID requires HTTPS or localhost.';
-      else msg += e.message;
-      alert(msg);
-    } finally {
-      setRegisteringStaff(null);
-    }
-  };
 
   // Save the star rating (1–3)
   const setRating = (id: string, name: string, rating: 1 | 2 | 3) => {
@@ -1022,17 +1001,6 @@ function StaffTab() {
                   </button>
                   <button onClick={() => setChatStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
                     <MessageCircle className="h-3 w-3" /> Chat
-                  </button>
-                </div>
-                {/* Face ID Registration */}
-                <div className="mt-2">
-                  <button 
-                    onClick={() => handleRegisterFaceId(s)} 
-                    disabled={registeringStaff?.id === s.id}
-                    className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-500/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <ScanFace className="h-3.5 w-3.5" /> 
-                    {registeringStaff?.id === s.id ? 'Registering...' : 'Register Face ID'}
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2">
