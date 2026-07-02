@@ -94,7 +94,6 @@ import {
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
 import CategoryIcon from '@/components/CategoryIcon';
-import CameraScanner from '@/components/CameraScanner';
 
 function CategoryIconPreview({ name }: { name: string }) {
   return <CategoryIcon category={name || 'Coffee'} className="h-6 w-6 text-[#D4AF37]" strokeWidth={1.4} />;
@@ -799,10 +798,20 @@ function StaffTab() {
     return () => clearInterval(int);
   }, []);
 
-  const handleFaceScanSuccess = (faceData: string) => {
-    if (registeringStaff) {
-      localStorage.setItem('hebli_face_scan_' + registeringStaff.id, faceData);
-      addLog('Face ID Registered', `Camera face registered for ${registeringStaff.name}`);
+  const handleRegisterFaceId = async (s: Staff) => {
+    setRegisteringStaff(s);
+    try {
+      const { registerBiometric } = await import('@/utils/faceid');
+      await registerBiometric(s.id, s.name);
+      addLog('Face ID Registered', `Face ID registered for ${s.name}`);
+      alert(`Face ID successfully registered for ${s.name}!`);
+    } catch (e: any) {
+      let msg = 'Failed to register Face ID. ';
+      if (e.message.includes('NotAllowedError')) msg += 'Registration cancelled or timed out.';
+      else if (e.message.includes('SecurityError')) msg += 'Face ID requires HTTPS or localhost.';
+      else msg += e.message;
+      alert(msg);
+    } finally {
       setRegisteringStaff(null);
     }
   };
@@ -1018,7 +1027,7 @@ function StaffTab() {
                 {/* Face ID Registration */}
                 <div className="mt-2">
                   <button 
-                    onClick={() => setRegisteringStaff(s)} 
+                    onClick={() => handleRegisterFaceId(s)} 
                     disabled={registeringStaff?.id === s.id}
                     className="w-full rounded-lg border border-blue-500/20 bg-blue-500/5 py-2 text-xs font-semibold text-blue-400 hover:bg-blue-500/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -1168,20 +1177,6 @@ function StaffTab() {
           )}
         </AnimatePresence>,
         document.body
-      )}
-
-      {/* Face Registration Camera Scanner */}
-      {registeringStaff && (
-        <CameraScanner
-          mode="register"
-          staffName={registeringStaff.name}
-          onClose={() => setRegisteringStaff(null)}
-          onSuccess={handleFaceScanSuccess}
-          onError={(msg: string) => {
-            alert('Failed to register: ' + msg);
-            setRegisteringStaff(null);
-          }}
-        />
       )}
     </div>
   );

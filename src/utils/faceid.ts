@@ -1,5 +1,6 @@
 // ============================================================
-// HEBLI – Professional Biometric Auth (WebAuthn)
+// HEBLI – Professional Biometric Auth (WebAuthn / Face ID)
+// Uses the device's actual secure enclave (Apple Face ID, Android Face Unlock)
 // ============================================================
 
 const RP_NAME = 'HEBLI Coffee';
@@ -7,10 +8,10 @@ const STORAGE_PREFIX = 'hebli_biometric_';
 
 function getRpId() {
   const host = window.location.hostname;
-  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) && host !== '127.0.0.1' && host !== 'localhost') {
-    throw new Error('Biometrics require a secure domain (HTTPS) or localhost.');
-  }
-  return host || 'localhost';
+  // WebAuthn requires a valid domain or localhost.
+  if (host === 'localhost' || host === '127.0.0.1') return host;
+  // For production (Render), use the actual domain.
+  return host;
 }
 
 function bufferToBase64(buffer: ArrayBuffer): string {
@@ -53,12 +54,12 @@ export async function isBiometricSupported(): Promise<boolean> {
   } catch { return false; }
 }
 
-// 1. REGISTER: Owner sets up Face ID for a staff member on this device
+// 1. REGISTER: Owner sets up Face ID for a staff member
 export async function registerBiometric(staffId: string, staffName: string): Promise<void> {
   const supported = await isBiometricSupported();
   if (!supported) throw new Error('This device does not support Face ID / Biometrics.');
 
-  clearCredential(staffId); // Clear old one if exists
+  clearCredential(staffId);
 
   const challenge = crypto.getRandomValues(new Uint8Array(32));
   const userId = new TextEncoder().encode(staffId);
