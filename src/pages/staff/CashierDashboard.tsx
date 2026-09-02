@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Coffee, DollarSign, Check, Receipt, User, Clock, Timer, Search, FileText,
+  Coffee, DollarSign, Check, User, Clock, FileText,
   Utensils, Bell, MessageCircle, X, Armchair, Sparkles, Plus, Minus, Trash2, ShoppingCart,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -24,20 +24,17 @@ import ChatPanel from '@/components/ChatPanel';
 import CategoryIcon from '@/components/CategoryIcon';
 import { useApp } from '@/contexts/AppContext';
 import {
-  getOrders, addOrder, updateOrderStatus, addPayment, addAuditLog, addNotification, getPayments,
+  getOrders, addOrder, updateOrderStatus, addPayment, addAuditLog, addNotification,
   setOrderTable, TABLE_COUNT, getActiveProducts,
 } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
-import type { Order, Payment, Product, CartItem } from '@/types';
+import type { Order, Product, CartItem } from '@/types';
 import { format } from 'date-fns';
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
   const { user, logoutUser, refreshOrders, syncTick } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [todayPayments, setTodayPayments] = useState<Payment[]>([]);
-  const [historyPayments, setHistoryPayments] = useState<Payment[]>([]);
-  const [historySearch, setHistorySearch] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   // Chat with barista drawer
@@ -74,16 +71,7 @@ export default function CashierDashboard() {
     }
     prevPendingRef.current = pendingCount;
     initializedRef.current = true;
-
-    if (user) {
-      const today = new Date().toISOString().split('T')[0];
-      const myPayments = getPayments()
-        .filter((p) => p.cashierName === user.name)
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-      setTodayPayments(myPayments.filter((p) => p.date === today));
-      setHistoryPayments(myPayments);
-    }
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     setProducts(getActiveProducts());
@@ -96,21 +84,6 @@ export default function CashierDashboard() {
 
   // ---- Derived lists -------------------------------------------------------
   const newOrders = orders.filter((o) => o.status === 'Pending');
-
-  const filteredHistory = historyPayments.filter((payment) => {
-    const q = historySearch.trim().toLowerCase();
-    if (!q) return true;
-    const order = getOrders().find((o) => o.id === payment.orderId);
-    return (
-      payment.id.toLowerCase().includes(q) ||
-      payment.orderId.toLowerCase().includes(q) ||
-      payment.date.toLowerCase().includes(q) ||
-      payment.time.toLowerCase().includes(q) ||
-      payment.amount.toFixed(2).includes(q) ||
-      (order?.clientName.toLowerCase().includes(q) ?? false) ||
-      (order?.items.some((item) => item.name.toLowerCase().includes(q)) ?? false)
-    );
-  });
 
   // Map of tableNumber -> order for the floor map.
   // If a table has several orders, prefer the UNPAID one (still to collect);
@@ -406,79 +379,6 @@ export default function CashierDashboard() {
           )}
         </div>
 
-        {/* Today's Payments */}
-        <div className="mt-12">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-white/40">
-            <Check className="h-4 w-4" />Commandes encaissées aujourd'hui
-          </h2>
-          {todayPayments.length > 0 ? (
-            <div className="space-y-2">
-              {todayPayments.map((p) => {
-                const order = getOrders().find((o) => o.id === p.orderId);
-                const prepStr = order?.prepTimeSeconds ? `${Math.floor(order.prepTimeSeconds / 60)}m ${order.prepTimeSeconds % 60}s` : '--';
-                return (
-                  <GlassCard key={p.id} className="flex items-center justify-between p-4" hover={false}>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-[#D4AF37]">{p.orderId}</span>
-                        <span className="text-[10px] text-white/30 font-mono bg-white/[0.03] px-2 py-0.5 rounded-full flex items-center gap-1"><Timer className="h-2.5 w-2.5" /> {prepStr}</span>
-                      </div>
-                      <div className="text-xs text-white/30 mt-1">{p.time}</div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold">{p.amount.toFixed(2)} DT</span>
-                      <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-green-400">✓ Payé</span>
-                    </div>
-                  </GlassCard>
-                );
-              })}
-            </div>
-          ) : (<div className="py-8 text-center text-white/20 text-sm">Aucun paiement enregistré aujourd'hui.</div>)}
-        </div>
-
-        {/* Payment History */}
-        <div className="mt-12">
-          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-white/40">
-            <Receipt className="h-4 w-4" />Historique des paiements
-            <span className="ml-auto rounded-full bg-white/[0.04] px-2 py-0.5 text-[10px] text-white/35">{filteredHistory.length}</span>
-          </h2>
-          <div className="relative mb-4">
-            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
-            <input value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} placeholder="Search history by order ID, customer name, date, or item..."
-              className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50 transition-colors" />
-          </div>
-          {filteredHistory.length > 0 ? (
-            <div className="space-y-2">
-              {filteredHistory.slice(0, 20).map((p) => {
-                const order = getOrders().find((o) => o.id === p.orderId);
-                const prepStr = order?.prepTimeSeconds ? `${Math.floor(order.prepTimeSeconds / 60)}m ${order.prepTimeSeconds % 60}s` : '--';
-                return (
-                  <GlassCard key={p.id} className="p-4" hover={false}>
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-bold text-[#D4AF37]">{p.orderId}</span>
-                          <span className="rounded-full bg-green-500/10 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-green-400">Paid</span>
-                          <span className="text-[10px] text-white/30 font-mono bg-white/[0.03] px-2 py-0.5 rounded-full flex items-center gap-1"><Timer className="h-2.5 w-2.5" /> {prepStr}</span>
-                        </div>
-                        <div className="mt-1 text-xs text-white/35 truncate">{order?.clientName || 'Unknown client'} • {p.date} • {p.time}</div>
-                        {order && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {order.items.map((item, i) => (<span key={i} className="rounded-full bg-white/[0.04] px-2 py-0.5 text-[11px] text-white/45">{item.quantity}x {item.name}</span>))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-sm font-semibold text-white">{p.amount.toFixed(2)} DT</div>
-                        <div className="text-[10px] text-white/25">{p.id}</div>
-                      </div>
-                    </div>
-                  </GlassCard>
-                );
-              })}
-            </div>
-          ) : (<div className="py-8 text-center text-white/20 text-sm">No payment history matches this search.</div>)}
-        </div>
       </main>
 
       {/* ============================================================
