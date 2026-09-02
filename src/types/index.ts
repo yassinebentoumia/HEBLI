@@ -60,6 +60,7 @@ export interface Order {
   status: OrderStatus;
   note?: string;
   prepTimeSeconds?: number;
+  tableNumber?: number;   // physical table assigned by the waiter (System Table)
   createdAt: string;
   updatedAt: string;
 }

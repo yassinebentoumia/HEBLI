@@ -177,7 +177,7 @@ export default function TrackOrder() {
                             transition={{ duration: 1.5, repeat: Infinity }}
                             className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] font-semibold text-[#D4AF37]"
                           >
-                            <CreditCard className="h-2.5 w-2.5" /> Go pay at cashier
+                            <CreditCard className="h-2.5 w-2.5" /> Go pay at waiter
                           </motion.div>
                         )}
                       </div>
@@ -260,7 +260,7 @@ export default function TrackOrder() {
                   <div className="flex-1">
                     <div className="text-base font-bold text-[#D4AF37]">Your order is ready! 🎉</div>
                     <div className="mt-0.5 text-sm text-white/70">
-                      Please go to the <span className="font-semibold text-white">cashier</span> to pay{' '}
+                      Please go to the <span className="font-semibold text-white">waiter</span> to pay{' '}
                       <span className="font-semibold text-[#D4AF37]">{selectedOrder.total.toFixed(2)} DT</span> and collect your order.
                     </div>
                   </div>

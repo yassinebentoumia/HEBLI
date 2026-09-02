@@ -2,8 +2,9 @@
 // HEBLI – Dynamic Staff Title (based on role + star rating)
 // ============================================================
 //
-// Cashier:
-//   1★ → "Caisse"
+// Waiter (internal role value is still "Cashier" so existing
+//         data + sync keep working — only the LABEL changed):
+//   1★ → "Serveur"
 //   2★ → "Left Hand"
 //   3★ → "Shift Manager"
 //
@@ -20,7 +21,7 @@ import type { Staff, StaffRole } from '@/types';
 
 const TITLES: Record<StaffRole, Record<1 | 2 | 3, string>> = {
   Cashier: {
-    1: 'Caisse',
+    1: 'Serveur',
     2: 'Left Hand',
     3: 'Shift Manager',
   },
@@ -42,7 +43,7 @@ export function getStaffTitle(staff: Pick<Staff, 'role' | 'rating'>): string {
     return TITLES[staff.role][rating as 1 | 2 | 3];
   }
   // No rating yet — default fallbacks
-  if (staff.role === 'Cashier') return 'Caisse';
+  if (staff.role === 'Cashier') return 'Serveur';
   if (staff.role === 'Barista') return 'Barista';
   return 'Owner';
 }

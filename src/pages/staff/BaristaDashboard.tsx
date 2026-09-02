@@ -444,7 +444,7 @@ export default function BaristaDashboard() {
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-amber-400 animate-pulse">
-                                  À payer en caisse
+                                  À payer au serveur
                                 </span>
                               )}
                             </div>

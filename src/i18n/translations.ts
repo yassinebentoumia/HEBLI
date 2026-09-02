@@ -107,10 +107,10 @@ export const T = {
   'track.customer': { en: 'Customer', it: 'Cliente', es: 'Cliente', ar: 'الزبون' },
   'track.readyTitle': { en: 'Your order is ready! 🎉', it: 'Il tuo ordine è pronto! 🎉', es: '¡Tu pedido está listo! 🎉', ar: 'طلبك جاهز! 🎉' },
   'track.readyBody1': { en: 'Please go to the', it: 'Vai alla', es: 'Por favor ve a la', ar: 'يرجى التوجه إلى' },
-  'track.readyCashier': { en: 'cashier', it: 'cassa', es: 'caja', ar: 'الكاشير' },
+  'track.readyCashier': { en: 'waiter', it: 'cameriere', es: 'camarero', ar: 'النادل' },
   'track.readyBody2': { en: 'to pay', it: 'per pagare', es: 'para pagar', ar: 'للدفع' },
   'track.readyBody3': { en: 'and collect your order.', it: 'e ritirare il tuo ordine.', es: 'y recoger tu pedido.', ar: 'واستلام طلبك.' },
-  'track.goPay': { en: 'Go pay at cashier', it: 'Paga alla cassa', es: 'Paga en caja', ar: 'ادفع في الكاشير' },
+  'track.goPay': { en: 'Go pay at waiter', it: 'Paga al cameriere', es: 'Paga al camarero', ar: 'ادفع للنادل' },
   'track.trackAnother': { en: 'Track Another', it: 'Traccia un altro', es: 'Seguir otro', ar: 'تتبع آخر' },
   'track.orderMore': { en: 'Order More', it: 'Altri ordini', es: 'Pedir más', ar: 'اطلب المزيد' },
   // Status step labels & descriptions
@@ -122,7 +122,7 @@ export const T = {
   'step.receivedDesc': { en: 'Your order has been placed and is awaiting processing.', it: 'Il tuo ordine è stato registrato ed è in attesa.', es: 'Tu pedido ha sido registrado y está en espera.', ar: 'تم تسجيل طلبك وهو قيد المعالجة.' },
   'step.prepDesc': { en: 'Our barista is crafting your drinks with care.', it: 'Il nostro barista sta preparando le tue bevande.', es: 'Nuestro barista está preparando tus bebidas.', ar: 'الباريستا يقوم بتحضير مشروباتك بعناية.' },
   'step.readyPickup': { en: 'Ready for Pickup', it: 'Pronto al ritiro', es: 'Listo para recoger', ar: 'جاهز للاستلام' },
-  'step.readyDesc': { en: 'Your order is ready! Please proceed to the cashier to pay and collect.', it: 'Il tuo ordine è pronto! Vai alla cassa per pagare e ritirare.', es: 'Tu pedido está listo. Ve a la caja para pagar y recoger.', ar: 'طلبك جاهز! يرجى التوجه إلى الكاشير للدفع والاستلام.' },
+  'step.readyDesc': { en: 'Your order is ready! Please proceed to the waiter to pay and collect.', it: 'Il tuo ordine è pronto! Vai alla cassa per pagare e ritirare.', es: 'Tu pedido está listo. Ve a la caja para pagar y recoger.', ar: 'طلبك جاهز! يرجى التوجه إلى الكاشير للدفع والاستلام.' },
   'step.paidConfirmed': { en: 'Payment Confirmed', it: 'Pagamento confermato', es: 'Pago confirmado', ar: 'تم تأكيد الدفع' },
   'step.paidDesc': { en: 'Payment successful. Enjoy your premium coffee!', it: 'Pagamento riuscito. Goditi il tuo caffè premium!', es: 'Pago exitoso. ¡Disfruta tu café premium!', ar: 'تمت عملية الدفع بنجاح. استمتع بقهوتك الفاخرة!' },
 

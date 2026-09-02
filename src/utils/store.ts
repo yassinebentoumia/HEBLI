@@ -590,6 +590,20 @@ export function updateOrderStatus(id: string, status: Order['status'], prepTimeS
   }
 }
 
+// Assign (or clear) a physical table number for an order — System Table feature.
+export function setOrderTable(id: string, tableNumber: number | undefined): void {
+  const orders = getOrders();
+  const idx = orders.findIndex((o) => o.id === id);
+  if (idx !== -1) {
+    orders[idx].tableNumber = tableNumber;
+    orders[idx].updatedAt = new Date().toISOString();
+    saveOrders(orders);
+  }
+}
+
+// How many tables the floor has (used by System Table). Change to fit your café.
+export const TABLE_COUNT = 12;
+
 // Staff
 export function getStaff(): Staff[] {
   return safeRead<Staff[]>(KEYS.staff, defaultStaff);
