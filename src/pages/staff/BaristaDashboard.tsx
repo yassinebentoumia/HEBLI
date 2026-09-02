@@ -15,12 +15,15 @@ import {
   VolumeX,
   DollarSign,
   Search,
+  MessageCircle,
+  X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
+import ChatPanel from '@/components/ChatPanel';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
@@ -94,6 +97,7 @@ export default function BaristaDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
   const [search, setSearch] = useState('');
   const prevPendingRef = useRef(0);
   const initializedRef = useRef(false);
@@ -219,6 +223,15 @@ export default function BaristaDashboard() {
           >
             {soundOn ? <Volume2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
             <span className="hidden sm:inline">{soundOn ? 'Sound' : 'Muted'}</span>
+          </button>
+
+          <button
+            onClick={() => setChatOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.02] px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold text-white/50 hover:text-white hover:bg-white/[0.05] transition-colors"
+            title="Chat avec le serveur"
+          >
+            <MessageCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <span className="hidden sm:inline">Serveur</span>
           </button>
 
           <StaffTopBar onLogout={() => { logoutUser(); navigate('/staff'); }} />
@@ -545,6 +558,44 @@ export default function BaristaDashboard() {
           </div>
         </div>
       </main>
+
+      {/* Chat with waiter — slide-over drawer */}
+      <AnimatePresence>
+        {chatOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
+            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col">
+              <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15 flex-shrink-0">
+                    <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold">Chat avec le serveur</h2>
+                    <p className="text-xs text-white/40">Communication directe service ↔ cuisine</p>
+                  </div>
+                </div>
+                <button onClick={() => setChatOpen(false)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05] flex-shrink-0">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="flex-1 min-h-0 p-4">
+                <ChatPanel
+                  conversationId="waiter-barista"
+                  senderName={user?.name || 'Barista'}
+                  senderRole={user ? getStaffTitle(user) : 'Barista'}
+                  placeholder="Écrire au serveur..."
+                  emptyText="Aucun message. Dites bonjour au serveur !"
+                  heightClass="h-full"
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
