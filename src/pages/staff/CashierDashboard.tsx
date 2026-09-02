@@ -37,7 +37,6 @@ export default function CashierDashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [todayPayments, setTodayPayments] = useState<Payment[]>([]);
   const [historyPayments, setHistoryPayments] = useState<Payment[]>([]);
-  const [orderSearch, setOrderSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -50,6 +49,7 @@ export default function CashierDashboard() {
   const initializedRef = useRef(false);
 
   // System Table dialogs
+  const [pickTableOpen, setPickTableOpen] = useState(false);               // choose a free table for a new order
   const [newOrderTable, setNewOrderTable] = useState<number | null>(null); // creating order for a free table
   const [detailTable, setDetailTable] = useState<number | null>(null);     // viewing an occupied table
 
@@ -60,7 +60,9 @@ export default function CashierDashboard() {
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
-    const relevant = all.filter((o) => o.status !== 'Paid');
+    // Keep unpaid orders + PAID orders that still hold a table (not freed yet),
+    // so a paid table stays visible with a "Payée" badge until "Libérer".
+    const relevant = all.filter((o) => o.status !== 'Paid' || o.tableNumber);
     relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     setOrders(relevant);
 
@@ -94,17 +96,6 @@ export default function CashierDashboard() {
 
   // ---- Derived lists -------------------------------------------------------
   const newOrders = orders.filter((o) => o.status === 'Pending');
-  const toCash = orders.filter((o) => o.status !== 'Pending');
-
-  const filteredToCash = toCash.filter((order) => {
-    const q = orderSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      order.id.toLowerCase().includes(q) ||
-      order.clientName.toLowerCase().includes(q) ||
-      order.items.some((item) => item.name.toLowerCase().includes(q))
-    );
-  });
 
   const filteredHistory = historyPayments.filter((payment) => {
     const q = historySearch.trim().toLowerCase();
@@ -121,9 +112,20 @@ export default function CashierDashboard() {
     );
   });
 
-  // Map of tableNumber -> order for the floor map
+  // Map of tableNumber -> order for the floor map.
+  // If a table has several orders, prefer the UNPAID one (still to collect);
+  // otherwise the paid order stays so we can show the "Payée" badge.
   const tableMap = new Map<number, Order>();
-  orders.forEach((o) => { if (o.tableNumber) tableMap.set(o.tableNumber, o); });
+  orders.forEach((o) => {
+    if (!o.tableNumber) return;
+    const existing = tableMap.get(o.tableNumber);
+    if (!existing) { tableMap.set(o.tableNumber, o); return; }
+    const existingUnpaid = existing.status !== 'Paid';
+    const thisUnpaid = o.status !== 'Paid';
+    if (thisUnpaid && !existingUnpaid) tableMap.set(o.tableNumber, o);
+  });
+  // Only occupied tables, sorted by table number.
+  const occupiedTables = Array.from(tableMap.keys()).sort((a, b) => a - b);
 
   // ---- Actions -------------------------------------------------------------
   const markAsPaid = (order: Order) => {
@@ -150,19 +152,21 @@ export default function CashierDashboard() {
       refreshOrders();
       loadOrders();
       setProcessingId(null);
-      setDetailTable(null);
+      // Keep the dialog OPEN so the waiter sees "Payée" + the "Libérer" action.
     }, 500);
   };
 
+  // "Libérer" — free the table (removes tableNumber from every order at it).
   const clearTable = (tableNumber: number) => {
-    const occupant = orders.find((o) => o.tableNumber === tableNumber);
-    if (occupant) { setOrderTable(occupant.id, undefined); loadOrders(); }
+    orders.filter((o) => o.tableNumber === tableNumber)
+      .forEach((o) => setOrderTable(o.id, undefined));
+    loadOrders();
     setDetailTable(null);
   };
 
   // ---- New order builder ---------------------------------------------------
   const openNewOrder = (tableNumber: number) => {
-    setCart([]); setBuilderNote(''); setNewOrderTable(tableNumber);
+    setCart([]); setBuilderNote(''); setPickTableOpen(false); setNewOrderTable(tableNumber);
   };
   const addToCart = (p: Product) => setCart((prev) => {
     const ex = prev.find((i) => i.productId === p.id);
@@ -345,125 +349,59 @@ export default function CashierDashboard() {
           )}
         </div>
 
-        {/* SYSTEM TABLE */}
+        {/* SYSTEM TABLE — occupied tables only */}
         <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-white/40">
           <Armchair className="h-4 w-4 text-[#D4AF37]" />
           System Table
-          <span className="ml-auto text-[10px] text-white/25 normal-case tracking-normal">Libre → nouvelle commande · Occupée → encaisser</span>
+          {occupiedTables.length > 0 && (
+            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400">{occupiedTables.length}</span>
+          )}
+          <button
+            onClick={() => setPickTableOpen(true)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/[0.08] px-3 py-1.5 text-[11px] font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/[0.16] transition-colors normal-case tracking-normal"
+            title="Créer une commande pour une nouvelle table"
+          >
+            <Plus className="h-3.5 w-3.5" /> Nouvelle table
+          </button>
         </h2>
 
         <div className="mb-10 grid grid-cols-3 sm:grid-cols-4 gap-3">
-          {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((num) => {
-            const occupant = tableMap.get(num);
-            const occupied = !!occupant;
+          {occupiedTables.map((num) => {
+            const occupant = tableMap.get(num)!;
+            const paid = occupant.status === 'Paid';
             return (
               <button
                 key={num}
-                onClick={() => (occupied ? setDetailTable(num) : openNewOrder(num))}
+                onClick={() => setDetailTable(num)}
                 className={`relative flex aspect-square flex-col items-center justify-center rounded-2xl border p-2 text-center transition-all active:scale-[0.97] ${
-                  occupied
-                    ? 'border-emerald-500/30 bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14]'
-                    : 'border-white/[0.08] bg-white/[0.02] hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.06]'
+                  paid
+                    ? 'border-[#D4AF37]/40 bg-[#D4AF37]/[0.08] hover:bg-[#D4AF37]/[0.14]'
+                    : 'border-emerald-500/30 bg-emerald-500/[0.08] hover:bg-emerald-500/[0.14]'
                 }`}
-                title={occupied ? `Table ${num} — ${occupant?.id}. Tap for details / pay.` : `Table ${num} — tap to create an order`}
+                title={`Table ${num} — ${occupant.id}. Tap for details.`}
               >
-                <Armchair className={`h-6 w-6 ${occupied ? 'text-emerald-400' : 'text-white/30'}`} />
-                <span className={`mt-1 text-sm font-bold ${occupied ? 'text-emerald-300' : 'text-white/70'}`}>{num}</span>
-                {occupied ? (
-                  <span className="mt-0.5 text-[9px] text-white/50">{occupant?.total.toFixed(2)} DT</span>
-                ) : (
-                  <span className="mt-0.5 inline-flex items-center gap-0.5 text-[9px] text-[#D4AF37]/70"><Plus className="h-2.5 w-2.5" /> Commander</span>
-                )}
-                <span className={`mt-0.5 text-[8px] uppercase tracking-wider ${occupied ? 'text-emerald-400/70' : 'text-white/25'}`}>{occupied ? 'Occupée' : 'Libre'}</span>
+                <Armchair className={`h-6 w-6 ${paid ? 'text-[#D4AF37]' : 'text-emerald-400'}`} />
+                <span className={`mt-1 text-sm font-bold ${paid ? 'text-[#D4AF37]' : 'text-emerald-300'}`}>{num}</span>
+                <span className="mt-0.5 text-[9px] text-white/50">{occupant.total.toFixed(2)} DT</span>
+                <span className={`mt-0.5 rounded-full px-1.5 text-[8px] font-bold uppercase tracking-wider ${
+                  paid ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'text-emerald-400/70'
+                }`}>
+                  {paid ? '✓ Payée' : 'Occupée'}
+                </span>
               </button>
             );
           })}
-        </div>
 
-        {/* ORDERS TO CASH */}
-        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold tracking-wider uppercase text-white/40">
-          <Receipt className="h-4 w-4" />
-          Commandes à encaisser
-          {toCash.length > 0 && (<span className="ml-auto rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-400">{toCash.length}</span>)}
-        </h2>
-
-        <div className="relative mb-4">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
-          <input value={orderSearch} onChange={(e) => setOrderSearch(e.target.value)} placeholder="Search ready orders by name, ID, or item..."
-            className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50 transition-colors" />
-        </div>
-
-        <div className="space-y-3">
-          <AnimatePresence>
-            {filteredToCash.map((order) => (
-              <motion.div key={order.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} layout>
-                <GlassCard>
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-lg font-bold text-[#D4AF37]">{order.id}</span>
-                        <StatusBadge status={order.status} />
-                        {order.tableNumber && (
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 flex items-center gap-1">
-                            <Armchair className="h-2.5 w-2.5" /> Table {order.tableNumber}
-                          </span>
-                        )}
-                        {order.prepTimeSeconds && (
-                          <span className="text-[10px] text-white/30 font-mono bg-white/[0.03] px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Timer className="h-2.5 w-2.5" />{Math.floor(order.prepTimeSeconds / 60)}m {order.prepTimeSeconds % 60}s
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-sm text-white/50">
-                        <User className="h-3.5 w-3.5" />{order.clientName}
-                        <span className="text-white/15">•</span>
-                        <Clock className="h-3.5 w-3.5" />
-                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {order.items.map((item, i) => (
-                          <span key={i} className="rounded-full bg-white/[0.04] px-2.5 py-0.5 text-xs text-white/50">{item.quantity}x {item.name}</span>
-                        ))}
-                      </div>
-                      {order.note && (
-                        <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-2.5 py-1.5 text-xs text-amber-300 inline-block">📝 {order.note}</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-xs text-white/25">Total</div>
-                        <div className="text-xl font-bold text-[#D4AF37]">{order.total.toFixed(2)} DT</div>
-                      </div>
-                      {order.tableNumber ? (
-                        <button
-                          onClick={() => setDetailTable(order.tableNumber!)}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.08] px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/[0.16] transition-colors"
-                          title="Ouvrir la table pour encaisser"
-                        >
-                          <Armchair className="h-4 w-4" /> Table {order.tableNumber}
-                        </button>
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-wider text-white/25">
-                          {order.status === 'Ready' ? 'Prête' : 'En préparation'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </GlassCard>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {toCash.length === 0 && (
-            <div className="py-20 text-center text-white/20">
-              <Check className="mx-auto h-10 w-10 opacity-30" />
-              <p className="mt-3 text-sm">Toutes les commandes sont payées ✓</p>
-            </div>
-          )}
-          {toCash.length > 0 && filteredToCash.length === 0 && (
-            <div className="py-12 text-center text-white/20">
-              <Search className="mx-auto h-8 w-8 opacity-30" />
-              <p className="mt-3 text-sm">No ready order matches this search.</p>
+          {occupiedTables.length === 0 && (
+            <div className="col-span-3 sm:col-span-4 py-14 text-center text-white/20">
+              <Armchair className="mx-auto h-10 w-10 opacity-30" />
+              <p className="mt-3 text-sm">Aucune table occupée.</p>
+              <button
+                onClick={() => setPickTableOpen(true)}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/[0.08] px-4 py-2 text-xs font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/[0.16]"
+              >
+                <Plus className="h-3.5 w-3.5" /> Nouvelle table
+              </button>
             </div>
           )}
         </div>
@@ -542,6 +480,53 @@ export default function CashierDashboard() {
           ) : (<div className="py-8 text-center text-white/20 text-sm">No payment history matches this search.</div>)}
         </div>
       </main>
+
+      {/* ============================================================
+          PICK A FREE TABLE (for a brand-new waiter order)
+         ============================================================ */}
+      <AnimatePresence>
+        {pickTableOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm" onClick={() => setPickTableOpen(false)} />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl bg-[#0C0C0C] border border-white/[0.08] shadow-2xl">
+              <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15"><Plus className="h-5 w-5 text-[#D4AF37]" /></div>
+                  <div>
+                    <h2 className="text-lg font-bold">Choisir une table libre</h2>
+                    <p className="text-xs text-white/40">Pour une nouvelle commande</p>
+                  </div>
+                </div>
+                <button onClick={() => setPickTableOpen(false)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]"><X className="h-5 w-5" /></button>
+              </div>
+              <div className="p-5 grid grid-cols-4 gap-3">
+                {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((num) => {
+                  const busy = tableMap.has(num);
+                  return (
+                    <button
+                      key={num}
+                      disabled={busy}
+                      onClick={() => openNewOrder(num)}
+                      className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-2 text-center transition-all active:scale-[0.97] ${
+                        busy
+                          ? 'border-white/[0.05] bg-white/[0.01] text-white/15 cursor-not-allowed'
+                          : 'border-[#D4AF37]/30 bg-[#D4AF37]/[0.06] text-[#D4AF37] hover:bg-[#D4AF37]/[0.16]'
+                      }`}
+                      title={busy ? `Table ${num} occupée` : `Table ${num} libre`}
+                    >
+                      <Armchair className="h-5 w-5" />
+                      <span className="mt-1 text-sm font-bold">{num}</span>
+                      <span className="mt-0.5 text-[8px] uppercase tracking-wider">{busy ? 'Occupée' : 'Libre'}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* ============================================================
           CREATE ORDER FOR A FREE TABLE
@@ -657,15 +642,30 @@ export default function CashierDashboard() {
                 </div>
               </div>
 
-              <div className="flex gap-2 p-5 pt-0">
-                <button onClick={() => clearTable(detailTable!)} className="rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white/60 hover:bg-white/[0.05]">
-                  Libérer la table
-                </button>
-                <GoldButton onClick={() => markAsPaid(detailOrder)} disabled={processingId === detailOrder.id || detailOrder.status !== 'Ready'} className="flex-1 justify-center">
-                  {processingId === detailOrder.id ? (<><Coffee className="h-4 w-4 animate-spin" />En cours</>)
-                    : detailOrder.status !== 'Ready' ? (<><Clock className="h-4 w-4" />En préparation</>)
-                    : (<><DollarSign className="h-4 w-4" />Encaisser</>)}
-                </GoldButton>
+              <div className="p-5 pt-0">
+                {detailOrder.status === 'Paid' ? (
+                  <>
+                    <div className="mb-3 flex items-center justify-center gap-2 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/[0.08] py-2.5 text-sm font-bold text-[#D4AF37]">
+                      <Check className="h-4 w-4" /> Payée
+                    </div>
+                    <button
+                      onClick={() => clearTable(detailTable!)}
+                      className="w-full rounded-xl bg-[#D4AF37] py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors active:scale-[0.98]"
+                    >
+                      Libérer la table
+                    </button>
+                  </>
+                ) : (
+                  <GoldButton
+                    onClick={() => markAsPaid(detailOrder)}
+                    disabled={processingId === detailOrder.id || detailOrder.status !== 'Ready'}
+                    className="w-full justify-center"
+                  >
+                    {processingId === detailOrder.id ? (<><Coffee className="h-4 w-4 animate-spin" />En cours</>)
+                      : detailOrder.status !== 'Ready' ? (<><Clock className="h-4 w-4" />En préparation</>)
+                      : (<><DollarSign className="h-4 w-4" />Encaisser</>)}
+                  </GoldButton>
+                )}
               </div>
             </motion.div>
           </>

@@ -122,7 +122,7 @@ export const T = {
   'step.received': { en: 'Order Received', it: 'Ordine ricevuto', es: 'Pedido recibido', ar: 'تم استلام الطلب' },
   'step.receivedDesc': { en: 'Your order has been placed and is awaiting processing.', it: 'Il tuo ordine è stato registrato ed è in attesa.', es: 'Tu pedido ha sido registrado y está en espera.', ar: 'تم تسجيل طلبك وهو قيد المعالجة.' },
   'step.prepDesc': { en: 'Our barista is crafting your drinks with care.', it: 'Il nostro barista sta preparando le tue bevande.', es: 'Nuestro barista está preparando tus bebidas.', ar: 'الباريستا يقوم بتحضير مشروباتك بعناية.' },
-  'step.readyPickup': { en: 'Ready for Pickup', it: 'Pronto al ritiro', es: 'Listo para recoger', ar: 'جاهز للاستلام' },
+  'step.readyPickup': { en: 'Your command on the way', it: 'Il tuo ordine è in arrivo', es: 'Tu pedido está en camino', ar: 'طلبك في الطريق' },
   'step.readyDesc': { en: 'Your order is ready! Please proceed to the waiter to pay and collect.', it: 'Il tuo ordine è pronto! Vai alla cassa per pagare e ritirare.', es: 'Tu pedido está listo. Ve a la caja para pagar y recoger.', ar: 'طلبك جاهز! يرجى التوجه إلى الكاشير للدفع والاستلام.' },
   'step.paidConfirmed': { en: 'Payment Confirmed', it: 'Pagamento confermato', es: 'Pago confirmado', ar: 'تم تأكيد الدفع' },
   'step.paidDesc': { en: 'Payment successful. Enjoy your premium coffee!', it: 'Pagamento riuscito. Goditi il tuo caffè premium!', es: 'Pago exitoso. ¡Disfruta tu café premium!', ar: 'تمت عملية الدفع بنجاح. استمتع بقهوتك الفاخرة!' },
