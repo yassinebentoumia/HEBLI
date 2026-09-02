@@ -434,11 +434,19 @@ export default function CashierDashboard() {
                         <div className="text-xs text-white/25">Total</div>
                         <div className="text-xl font-bold text-[#D4AF37]">{order.total.toFixed(2)} DT</div>
                       </div>
-                      <GoldButton onClick={() => markAsPaid(order)} disabled={processingId === order.id || order.status !== 'Ready'}>
-                        {processingId === order.id ? (<><Coffee className="h-4 w-4 animate-spin" />En cours</>)
-                          : order.status !== 'Ready' ? (<><Clock className="h-4 w-4" />En préparation</>)
-                          : (<><DollarSign className="h-4 w-4" />Encaisser</>)}
-                      </GoldButton>
+                      {order.tableNumber ? (
+                        <button
+                          onClick={() => setDetailTable(order.tableNumber!)}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.08] px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/[0.16] transition-colors"
+                          title="Ouvrir la table pour encaisser"
+                        >
+                          <Armchair className="h-4 w-4" /> Table {order.tableNumber}
+                        </button>
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-wider text-white/25">
+                          {order.status === 'Ready' ? 'Prête' : 'En préparation'}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </GlassCard>

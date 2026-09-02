@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
-import { getActiveProducts, getCategories, addOrder, addAuditLog, addNotification } from '@/utils/store';
+import { getActiveProducts, getCategories, addOrder, addAuditLog, addNotification, TABLE_COUNT } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category } from '@/types';
 
@@ -24,7 +24,7 @@ export default function Menu() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
-  const [clientName, setClientName] = useState('');
+  const [tableInput, setTableInput] = useState('');
   const [orderNote, setOrderNote] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -84,15 +84,17 @@ export default function Menu() {
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
   const placeOrder = () => {
-    if (!clientName.trim()) return;
+    const tableNumber = parseInt(tableInput.trim(), 10);
+    if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT) return;
     const id = 'ORD-' + String(Date.now()).slice(-6);
     const order = {
       id,
-      clientName: clientName.trim(),
+      clientName: `Table ${tableNumber}`,
       items: [...cart],
       total,
       status: 'Pending' as const,
       note: orderNote.trim() || undefined,
+      tableNumber,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -100,8 +102,8 @@ export default function Menu() {
     addAuditLog({
       id: 'log-' + Date.now(),
       action: 'Order Placed',
-      details: `Order ${id} by ${clientName} for ${total.toFixed(2)} DT`,
-      user: clientName.trim(),
+      details: `Order ${id} for ${order.clientName} • ${total.toFixed(2)} DT`,
+      user: order.clientName,
       timestamp: new Date().toISOString(),
     });
     // Notify barista AND cashier of the new order
@@ -109,7 +111,7 @@ export default function Menu() {
       id: 'ntf-' + Date.now() + '-b',
       target: 'Barista',
       title: 'New Order',
-      body: `${id} from ${clientName.trim()} • ${total.toFixed(2)} DT`,
+      body: `${id} • ${order.clientName} • ${total.toFixed(2)} DT`,
       type: 'order',
       read: false,
       createdAt: new Date().toISOString(),
@@ -118,18 +120,18 @@ export default function Menu() {
       id: 'ntf-' + Date.now() + '-c',
       target: 'Cashier',
       title: 'New Order',
-      body: `${id} from ${clientName.trim()} • ${total.toFixed(2)} DT`,
+      body: `${id} • ${order.clientName} • ${total.toFixed(2)} DT`,
       type: 'order',
       read: false,
       createdAt: new Date().toISOString(),
     });
-    localStorage.setItem('hebli_client_name', clientName.trim());
+    localStorage.setItem('hebli_client_name', order.clientName);
     setOrderId(id);
     setFinalTotal(total);
     setOrderNote('');
     setOrderPlaced(true);
     setCart([]);
-    setClientName('');
+    setTableInput('');
   };
 
   if (orderPlaced) {
@@ -503,11 +505,14 @@ export default function Menu() {
                     </div>
                     <div className="space-y-3">
                       <input
-                        type="text"
-                        placeholder={t('cart.yourName')}
-                        value={clientName}
-                        onChange={e => setClientName(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={TABLE_COUNT}
+                        placeholder={t('cart.tableNumber')}
+                        value={tableInput}
+                        onChange={e => setTableInput(e.target.value)}
+                        className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <textarea
                         placeholder={t('cart.notePlaceholder')}
@@ -519,7 +524,7 @@ export default function Menu() {
                     </div>
                     <button
                       onClick={placeOrder}
-                      disabled={!clientName.trim()}
+                      disabled={(() => { const n = parseInt(tableInput.trim(), 10); return !n || n < 1 || n > TABLE_COUNT; })()}
                       className="w-full rounded-2xl bg-[#D4AF37] py-4 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
                       {t('cart.placeOrder')} • {total.toFixed(2)} DT
