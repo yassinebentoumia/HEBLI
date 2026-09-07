@@ -73,11 +73,12 @@ export default function CashierDashboard() {
     initializedRef.current = true;
   }, []);
 
+  // Initial load only. Live updates come from the central sync signal
+  // (syncTick), which fires ONLY when the shared data actually changed —
+  // no blind per-second auto-refresh.
   useEffect(() => {
     setProducts(getActiveProducts());
     loadOrders();
-    const interval = setInterval(loadOrders, 3000);
-    return () => clearInterval(interval);
   }, [loadOrders]);
 
   useEffect(() => { loadOrders(); }, [syncTick, loadOrders]);

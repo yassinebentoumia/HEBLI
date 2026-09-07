@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
+import { useApp } from '@/contexts/AppContext';
 import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category } from '@/types';
@@ -18,6 +19,7 @@ import type { Product, CartItem, Category } from '@/types';
 export default function Menu() {
   const navigate = useNavigate();
   const { t } = useT();
+  const { syncTick } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -49,24 +51,17 @@ export default function Menu() {
   }, []);
 
   // Track which tables are currently taken (any active, unpaid order with a table).
+  // Driven by the central sync signal (syncTick) — refreshes only when the shared
+  // data actually changes, and only while the checkout drawer is open (when the
+  // client is actually choosing a table). No blind timer / auto-refresh.
   useEffect(() => {
-    const refresh = () => {
-      const taken = new Set<number>();
-      getOrders().forEach((o) => {
-        if (o.tableNumber && o.status !== 'Paid') taken.add(o.tableNumber);
-      });
-      setOccupiedTables(Array.from(taken));
-      // If my table was freed (paid & cleared), forget it.
-      const mt = parseInt(localStorage.getItem('hebli_client_table') || '', 10);
-      if (mt >= 1 && !taken.has(mt)) {
-        // keep myTable so the client can still re-select it until they leave;
-        // but it becomes selectable-as-free again automatically.
-      }
-    };
-    refresh();
-    const int = setInterval(refresh, 3000);
-    return () => clearInterval(int);
-  }, []);
+    if (!cartOpen) return;
+    const taken = new Set<number>();
+    getOrders().forEach((o) => {
+      if (o.tableNumber && o.status !== 'Paid') taken.add(o.tableNumber);
+    });
+    setOccupiedTables(Array.from(taken));
+  }, [cartOpen, syncTick]);
 
   const filtered = products.filter((p) => {
     const catMatch = activeCategory === 'All' || p.category === activeCategory;

@@ -33,12 +33,16 @@ export default function AccessGate({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // Check once on mount.
+  useEffect(() => { check(); }, []);
+
+  // Only keep re-checking WHILE blocked (so it unlocks once they join the café
+  // Wi-Fi). Once allowed, we stop polling entirely — no background auto-refresh.
   useEffect(() => {
-    check();
-    // Re-check periodically so it unlocks quickly once they join the Wi-Fi
-    const int = setInterval(check, 8000);
+    if (state !== 'blocked') return;
+    const int = setInterval(check, 10000);
     return () => clearInterval(int);
-  }, []);
+  }, [state]);
 
   if (state === 'checking') {
     return (

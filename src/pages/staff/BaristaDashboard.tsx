@@ -133,12 +133,10 @@ export default function BaristaDashboard() {
     initializedRef.current = true;
   }, [soundOn]);
 
+  // Initial load only — live updates are driven by the central sync signal
+  // (syncTick fires only when shared data actually changed).
   useEffect(() => {
     loadOrders();
-    // local poll every 3s
-    const interval = setInterval(loadOrders, 3000);
-    // hard auto-refresh every 2 minutes
-    return () => { clearInterval(interval); };
   }, [loadOrders]);
 
   // React to cross-device sync updates immediately

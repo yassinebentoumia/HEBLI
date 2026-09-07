@@ -70,23 +70,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await pushRemote();
     })();
 
-    // Poll every 2s for remote changes
-    const syncPoll = setInterval(async () => {
+    // Poll for remote changes. Two optimizations to avoid needless "auto refresh":
+    //  1) Only update `orders` state (and bump syncTick) when data ACTUALLY
+    //     changed — otherwise we'd hand React a new array every tick and force
+    //     re-renders across the whole app.
+    //  2) Pause polling while the tab is hidden (saves battery/network); pull
+    //     once immediately when it becomes visible again.
+    const POLL_MS = 3000;
+    const tick = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const changed = await pullRemote();
       setSyncStatus(isOnline() ? 'online' : 'offline');
       if (changed) {
         setOrders(getOrders());
         setSyncTick((t) => t + 1);
-      } else {
-        setOrders(getOrders());
       }
-    }, 2000);
+    };
+    const syncPoll = setInterval(tick, POLL_MS);
+
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        tick(); // refresh right away when the user returns
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     const backupInterval = setInterval(createBackup, 6 * 60 * 60 * 1000);
 
     return () => {
       clearInterval(syncPoll);
       clearInterval(backupInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 
