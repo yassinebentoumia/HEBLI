@@ -23,10 +23,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Behind Render/other proxies, trust X-Forwarded-For so req.ip is the real
+// client IP (needed for the café Wi-Fi lock).
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 const DATA_FILE = path.join(__dirname, 'data.json');
+
+// Normalize an IP (strip IPv6-mapped IPv4 prefix, take first XFF hop).
+function clientIp(req) {
+  let ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
+  if (ip.startsWith('::ffff:')) ip = ip.slice(7);
+  return ip;
+}
 
 // Load persisted state on startup
 let state = { _updatedAt: 0 };
@@ -294,6 +304,60 @@ app.post('/api/ai', async (req, res) => {
 // GET current shared state
 app.get('/api/state', (_req, res) => {
   res.json(state);
+});
+
+// ============================================================
+// CAFÉ WI-FI LOCK
+// The client app only works for devices on the café's network.
+// Because every device on the café Wi-Fi shares the same public IP
+// (the router's WAN IP), we compare the requester IP to the stored café IP.
+// The OWNER enables it while on the café Wi-Fi → we snapshot that IP.
+// state.wifiLock = { enabled: boolean, cafeIp: string, updatedAt: number }
+// ============================================================
+
+function getWifiLock() {
+  if (!state.wifiLock || typeof state.wifiLock !== 'object') {
+    state.wifiLock = { enabled: false, cafeIp: '', updatedAt: 0 };
+  }
+  return state.wifiLock;
+}
+
+// Is a request allowed to use the CLIENT app right now?
+function isAccessAllowed(req) {
+  const lock = getWifiLock();
+  if (!lock.enabled) return true;         // lock off → everyone allowed
+  if (!lock.cafeIp) return true;          // no café IP captured yet → don't lock people out
+  return clientIp(req) === lock.cafeIp;   // must be on the same public IP (café Wi-Fi)
+}
+
+// Client calls this on boot to know whether it may run.
+app.get('/api/access', (req, res) => {
+  const lock = getWifiLock();
+  res.json({
+    enabled: !!lock.enabled,
+    allowed: isAccessAllowed(req),
+    yourIp: clientIp(req),
+    cafeIp: lock.cafeIp || '',
+  });
+});
+
+// Owner toggles the lock. Body: { enabled: boolean, cafeIp?: string }
+// When enabling, we snapshot the OWNER's current IP as the café IP unless one is
+// provided explicitly.
+app.post('/api/wifi-lock', (req, res) => {
+  const lock = getWifiLock();
+  const enabled = !!(req.body && req.body.enabled);
+  lock.enabled = enabled;
+  if (enabled) {
+    lock.cafeIp = (req.body && typeof req.body.cafeIp === 'string' && req.body.cafeIp)
+      ? req.body.cafeIp
+      : clientIp(req);
+  }
+  lock.updatedAt = Date.now();
+  state.wifiLock = lock;
+  state._updatedAt = Date.now();
+  persist();
+  res.json({ ok: true, wifiLock: lock, yourIp: clientIp(req) });
 });
 
 // POST partial state → server merges with existing

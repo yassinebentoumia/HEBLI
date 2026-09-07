@@ -2,7 +2,7 @@
 // HEBLI – Owner Dashboard (Premium Management Center)
 // ============================================================
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -34,6 +34,7 @@ import {
   Star,
   Calendar,
   Printer,
+  Wifi, WifiOff,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -89,6 +90,8 @@ import {
   getInvoices,
   getConsumptions,
   addConsumption,
+  addAuditLog,
+  getCurrentUser,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
@@ -116,7 +119,7 @@ import type {
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'reports' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'reports' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs' | 'settings';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -132,6 +135,7 @@ const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'tickets', label: 'Tickets', icon: LifeBuoy },
   { key: 'assistant', label: 'AI Assistant', icon: Sparkles },
   { key: 'logs', label: 'Audit Logs', icon: FileText },
+  { key: 'settings', label: 'Settings', icon: Wifi },
 ];
 const staffRoles: StaffRole[] = ['Barista', 'Cashier', 'Administrator'];
 export default function OwnerDashboard() {
@@ -160,6 +164,7 @@ export default function OwnerDashboard() {
       case 'tickets': return <TicketsTab />;
       case 'assistant': return <AIAssistantTab />;
       case 'logs': return <AuditLogsTab />;
+      case 'settings': return <SettingsTab />;
       default: return null;
     }
   };
@@ -3075,6 +3080,126 @@ function ReportsTab() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Settings Tab — Café Wi-Fi Lock (Owner only)
+// ============================================================
+interface WifiLockInfo {
+  enabled: boolean;
+  allowed: boolean;
+  yourIp: string;
+  cafeIp: string;
+}
+
+function SettingsTab() {
+  const [info, setInfo] = useState<WifiLockInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch('/api/access', { cache: 'no-store' });
+      if (!res.ok) throw new Error('unavailable');
+      setInfo(await res.json());
+      setError(null);
+    } catch {
+      setError("Le verrou Wi-Fi nécessite le serveur Node (server.js). Indisponible ici.");
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = async (enabled: boolean) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/wifi-lock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error('failed');
+      await load();
+      addAuditLog({
+        id: 'log-' + Date.now(),
+        action: enabled ? 'Wi-Fi Lock Enabled' : 'Wi-Fi Lock Disabled',
+        details: enabled
+          ? "Accès client restreint au Wi-Fi du café"
+          : "Accès client ouvert à tous les réseaux",
+        user: getCurrentUser()?.name || 'Owner',
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      setError("Impossible de mettre à jour le verrou (serveur requis).");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const enabled = !!info?.enabled;
+
+  return (
+    <div className="max-w-2xl">
+      <h2 className="mb-1 text-lg font-bold">Paramètres · Accès</h2>
+      <p className="mb-6 text-sm text-white/40">
+        Restreindre le menu client aux appareils connectés au Wi-Fi du café.
+      </p>
+
+      <GlassCard hover={false}>
+        <div className="flex items-start gap-4">
+          <div className={`flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl ${enabled ? 'bg-[#D4AF37]/15' : 'bg-white/[0.04]'}`}>
+            {enabled ? <Wifi className="h-6 w-6 text-[#D4AF37]" /> : <WifiOff className="h-6 w-6 text-white/40" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold">Wi-Fi du café uniquement</h3>
+                <p className="mt-0.5 text-xs text-white/45">
+                  {enabled
+                    ? "Activé — seuls les clients sur le Wi-Fi du café peuvent commander."
+                    : "Désactivé — le menu client est accessible partout."}
+                </p>
+              </div>
+
+              {/* Toggle switch */}
+              <button
+                disabled={busy}
+                onClick={() => toggle(!enabled)}
+                className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors disabled:opacity-50 ${enabled ? 'bg-[#D4AF37]' : 'bg-white/15'}`}
+                title={enabled ? 'Désactiver' : 'Activer'}
+              >
+                <span className={`absolute top-1 h-5 w-5 rounded-full bg-black transition-all ${enabled ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="text-white/30 uppercase tracking-wider text-[10px]">IP du café</div>
+                <div className="mt-1 font-mono text-white/70">{info?.cafeIp || '—'}</div>
+              </div>
+              <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+                <div className="text-white/30 uppercase tracking-wider text-[10px]">Votre IP</div>
+                <div className="mt-1 font-mono text-white/70">{info?.yourIp || '—'}</div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-3 text-[11px] leading-relaxed text-amber-200/80">
+              💡 Activez cette option <strong>pendant que vous êtes connecté au Wi-Fi du café</strong> :
+              l'adresse IP publique du café est enregistrée automatiquement. Les appareils sur d'autres
+              réseaux verront un message « Wi-Fi requis ». Les pages du personnel restent toujours accessibles.
+            </div>
+
+            {error && (
+              <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3 text-xs text-red-300">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      </GlassCard>
     </div>
   );
 }

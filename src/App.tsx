@@ -7,6 +7,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from '@/contexts/AppContext';
 import { I18nProvider } from '@/i18n/I18nProvider';
 import LoadingScreen from '@/components/LoadingScreen';
+import AccessGate from '@/components/AccessGate';
 
 // Lazy-loaded pages
 import { lazy, Suspense } from 'react';
@@ -52,11 +53,11 @@ export default function App() {
           <LoadingScreen />
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* Client Portal */}
-              <Route path="/" element={<Landing />} />
-              <Route path="/client/menu" element={<Menu />} />
-              <Route path="/client/track" element={<TrackOrder />} />
-              <Route path="/client/support" element={<Support />} />
+              {/* Client Portal — gated by café Wi-Fi lock */}
+              <Route path="/" element={<AccessGate><Landing /></AccessGate>} />
+              <Route path="/client/menu" element={<AccessGate><Menu /></AccessGate>} />
+              <Route path="/client/track" element={<AccessGate><TrackOrder /></AccessGate>} />
+              <Route path="/client/support" element={<AccessGate><Support /></AccessGate>} />
 
               {/* Staff Portal */}
               <Route path="/staff" element={<StaffLogin />} />

@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
-import { getActiveProducts, getCategories, addOrder, addAuditLog, addNotification, TABLE_COUNT } from '@/utils/store';
+import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category } from '@/types';
 
@@ -25,6 +25,13 @@ export default function Menu() {
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
+  const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
+  // The table this device is "using" (chosen earlier) — this client may keep
+  // ordering for it even though it shows as occupied to everyone else.
+  const [myTable, setMyTable] = useState<number | null>(() => {
+    const v = parseInt(localStorage.getItem('hebli_client_table') || '', 10);
+    return v >= 1 ? v : null;
+  });
   const [orderNote, setOrderNote] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -39,6 +46,26 @@ export default function Menu() {
   useEffect(() => {
     setProducts(getActiveProducts());
     setCategories(getCategories());
+  }, []);
+
+  // Track which tables are currently taken (any active, unpaid order with a table).
+  useEffect(() => {
+    const refresh = () => {
+      const taken = new Set<number>();
+      getOrders().forEach((o) => {
+        if (o.tableNumber && o.status !== 'Paid') taken.add(o.tableNumber);
+      });
+      setOccupiedTables(Array.from(taken));
+      // If my table was freed (paid & cleared), forget it.
+      const mt = parseInt(localStorage.getItem('hebli_client_table') || '', 10);
+      if (mt >= 1 && !taken.has(mt)) {
+        // keep myTable so the client can still re-select it until they leave;
+        // but it becomes selectable-as-free again automatically.
+      }
+    };
+    refresh();
+    const int = setInterval(refresh, 3000);
+    return () => clearInterval(int);
   }, []);
 
   const filtered = products.filter((p) => {
@@ -126,6 +153,8 @@ export default function Menu() {
       createdAt: new Date().toISOString(),
     });
     localStorage.setItem('hebli_client_name', order.clientName);
+    localStorage.setItem('hebli_client_table', String(tableNumber));
+    setMyTable(tableNumber);
     setOrderId(id);
     setFinalTotal(total);
     setOrderNote('');
@@ -512,20 +541,29 @@ export default function Menu() {
                         <div className="grid grid-cols-4 gap-2">
                           {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((num) => {
                             const active = selectedTable === num;
+                            const isMine = myTable === num;
+                            // A table is locked if it's occupied by SOMEONE ELSE.
+                            const locked = occupiedTables.includes(num) && !isMine;
                             return (
                               <button
                                 key={num}
                                 type="button"
+                                disabled={locked}
                                 onClick={() => setSelectedTable(num)}
-                                className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
-                                  active
+                                className={`relative flex aspect-square flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
+                                  locked
+                                    ? 'border-white/[0.04] bg-white/[0.01] text-white/15 cursor-not-allowed'
+                                    : active
                                     ? 'border-[#D4AF37] bg-[#D4AF37]/[0.15] text-[#D4AF37] ring-2 ring-[#D4AF37]/40'
                                     : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.06]'
                                 }`}
-                                title={`Table ${num}`}
+                                title={locked ? `Table ${num} occupée` : isMine ? `Votre table ${num}` : `Table ${num}`}
                               >
-                                <Armchair className={`h-4 w-4 ${active ? 'text-[#D4AF37]' : 'text-white/40'}`} />
+                                <Armchair className={`h-4 w-4 ${locked ? 'text-white/15' : active ? 'text-[#D4AF37]' : 'text-white/40'}`} />
                                 <span className="mt-0.5 text-sm font-bold">{num}</span>
+                                {isMine && !locked && (
+                                  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#D4AF37]" />
+                                )}
                               </button>
                             );
                           })}
