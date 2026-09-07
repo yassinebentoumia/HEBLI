@@ -76,6 +76,7 @@ export const T = {
   'cart.emptyHint': { en: 'Add some delicious items!', it: 'Aggiungi articoli deliziosi!', es: '¡Añade algo delicioso!', ar: 'أضف بعض العناصر اللذيذة!' },
   'cart.yourName': { en: 'Your name', it: 'Il tuo nome', es: 'Tu nombre', ar: 'اسمك' },
   'cart.tableNumber': { en: 'Table number (e.g. 11)', it: 'Numero tavolo (es. 11)', es: 'Número de mesa (ej. 11)', ar: 'رقم الطاولة (مثال 11)' },
+  'cart.chooseTable': { en: 'Choose your table', it: 'Scegli il tuo tavolo', es: 'Elige tu mesa', ar: 'اختر طاولتك' },
   'cart.notePlaceholder': {
     en: 'Add a note (e.g. no sugar, extra hot, oat milk...)',
     it: 'Aggiungi una nota (es. senza zucchero, extra caldo, latte d’avena...)',

@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import {
-  ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Search, Check, Coffee, X, Sparkles, ChevronRight,
+  ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Search, Check, Coffee, X, Sparkles, ChevronRight, Armchair,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
@@ -24,7 +24,7 @@ export default function Menu() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [search, setSearch] = useState('');
   const [cartOpen, setCartOpen] = useState(false);
-  const [tableInput, setTableInput] = useState('');
+  const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [orderNote, setOrderNote] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -84,7 +84,7 @@ export default function Menu() {
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
   const placeOrder = () => {
-    const tableNumber = parseInt(tableInput.trim(), 10);
+    const tableNumber = selectedTable;
     if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT) return;
     const id = 'ORD-' + String(Date.now()).slice(-6);
     const order = {
@@ -131,7 +131,7 @@ export default function Menu() {
     setOrderNote('');
     setOrderPlaced(true);
     setCart([]);
-    setTableInput('');
+    setSelectedTable(null);
   };
 
   if (orderPlaced) {
@@ -504,16 +504,33 @@ export default function Menu() {
                       <span className="text-2xl font-bold">{total.toFixed(2)} DT</span>
                     </div>
                     <div className="space-y-3">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={TABLE_COUNT}
-                        placeholder={t('cart.tableNumber')}
-                        value={tableInput}
-                        onChange={e => setTableInput(e.target.value)}
-                        className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
+                      <div>
+                        <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-white/40">
+                          <Armchair className="h-3.5 w-3.5 text-[#D4AF37]" />
+                          {t('cart.chooseTable')}
+                        </div>
+                        <div className="grid grid-cols-4 gap-2">
+                          {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((num) => {
+                            const active = selectedTable === num;
+                            return (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => setSelectedTable(num)}
+                                className={`flex aspect-square flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
+                                  active
+                                    ? 'border-[#D4AF37] bg-[#D4AF37]/[0.15] text-[#D4AF37] ring-2 ring-[#D4AF37]/40'
+                                    : 'border-white/[0.06] bg-white/[0.02] text-white/60 hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.06]'
+                                }`}
+                                title={`Table ${num}`}
+                              >
+                                <Armchair className={`h-4 w-4 ${active ? 'text-[#D4AF37]' : 'text-white/40'}`} />
+                                <span className="mt-0.5 text-sm font-bold">{num}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
                       <textarea
                         placeholder={t('cart.notePlaceholder')}
                         value={orderNote}
@@ -524,7 +541,7 @@ export default function Menu() {
                     </div>
                     <button
                       onClick={placeOrder}
-                      disabled={(() => { const n = parseInt(tableInput.trim(), 10); return !n || n < 1 || n > TABLE_COUNT; })()}
+                      disabled={!selectedTable}
                       className="w-full rounded-2xl bg-[#D4AF37] py-4 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
                       {t('cart.placeOrder')} • {total.toFixed(2)} DT
