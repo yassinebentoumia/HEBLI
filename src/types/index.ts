@@ -21,6 +21,17 @@ export type InventoryItemType =
   | 'Packaging'
   | 'Other';
 
+// Weekly work schedule (booked hours) — owner sets, staff sees.
+export type WeekDayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface DaySchedule {
+  working: boolean;   // false = day off
+  start: string;      // "09:00"
+  end: string;        // "17:00"
+}
+
+export type WeekSchedule = Record<WeekDayKey, DaySchedule>;
+
 export interface Staff {
   id: string;
   name: string;
@@ -30,6 +41,7 @@ export interface Staff {
   active: boolean;
   rating?: 1 | 2 | 3;            // 1–3 stars set by owner
   salaryPerMinute?: number;      // DT per minute (used to compute paid time)
+  schedule?: WeekSchedule;       // booked working hours Mon→Sun
   createdAt: string;
 }
 
@@ -61,6 +73,8 @@ export interface Order {
   note?: string;
   prepTimeSeconds?: number;
   tableNumber?: number;   // physical table assigned by the waiter (System Table)
+  loyaltyId?: string;     // loyalty member this order belongs to (for points on payment)
+  loyaltyAwarded?: boolean; // guard so points are granted only once per order
   createdAt: string;
   updatedAt: string;
 }
@@ -226,4 +240,22 @@ export interface AIQuery {
   question: string;
   answer: string;
   timestamp: string;
+}
+
+// ============================================================
+// Loyalty / VIP
+// ============================================================
+
+export type LoyaltyTier = 'Silver' | 'Gold' | 'Black';
+
+export interface LoyaltyMember {
+  id: string;            // stable id (normalized phone/name)
+  name: string;          // display name
+  phone?: string;
+  points: number;        // lifetime points balance
+  totalSpent: number;    // lifetime DT spent
+  visits: number;        // number of paid orders
+  tier: LoyaltyTier;
+  createdAt: string;
+  updatedAt: string;
 }

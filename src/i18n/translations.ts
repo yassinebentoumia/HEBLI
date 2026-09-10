@@ -77,6 +77,7 @@ export const T = {
   'cart.yourName': { en: 'Your name', it: 'Il tuo nome', es: 'Tu nombre', ar: 'اسمك' },
   'cart.tableNumber': { en: 'Table number (e.g. 11)', it: 'Numero tavolo (es. 11)', es: 'Número de mesa (ej. 11)', ar: 'رقم الطاولة (مثال 11)' },
   'cart.chooseTable': { en: 'Choose your table', it: 'Scegli il tuo tavolo', es: 'Elige tu mesa', ar: 'اختر طاولتك' },
+  'cart.loyaltyOptional': { en: '★ Name/phone to earn VIP points (optional)', it: '★ Nome/telefono per punti VIP (opzionale)', es: '★ Nombre/teléfono para puntos VIP (opcional)', ar: '★ الاسم/الهاتف لكسب نقاط VIP (اختياري)' },
   'cart.notePlaceholder': {
     en: 'Add a note (e.g. no sugar, extra hot, oat milk...)',
     it: 'Aggiungi una nota (es. senza zucchero, extra caldo, latte d’avena...)',

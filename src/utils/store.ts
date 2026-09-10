@@ -19,6 +19,10 @@ import type {
   Supplier,
   Invoice,
   Consumption,
+  LoyaltyMember,
+  LoyaltyTier,
+  WeekSchedule,
+  WeekDayKey,
 } from '@/types';
 import { schedulePush, SYNC_KEYS, recordDeletion } from './sync';
 
@@ -38,6 +42,7 @@ const KEYS = {
   suppliers: 'hebli_suppliers',
   invoices: 'hebli_invoices',
   consumptions: 'hebli_consumptions',
+  loyalty: 'hebli_loyalty',
   backups: 'hebli_backups',
   currentUser: 'hebli_current_user',
 };
@@ -628,6 +633,62 @@ export function updateStaffMember(id: string, updates: Partial<Staff>): void {
   }
 }
 
+// ============================================================
+// Staff weekly schedule (booked hours) — owner sets, staff sees.
+// ============================================================
+export const WEEK_DAYS: { key: WeekDayKey; label: string; labelFr: string }[] = [
+  { key: 'mon', label: 'Monday', labelFr: 'Lundi' },
+  { key: 'tue', label: 'Tuesday', labelFr: 'Mardi' },
+  { key: 'wed', label: 'Wednesday', labelFr: 'Mercredi' },
+  { key: 'thu', label: 'Thursday', labelFr: 'Jeudi' },
+  { key: 'fri', label: 'Friday', labelFr: 'Vendredi' },
+  { key: 'sat', label: 'Saturday', labelFr: 'Samedi' },
+  { key: 'sun', label: 'Sunday', labelFr: 'Dimanche' },
+];
+
+// A blank default week (all days off) so the owner starts from a clean slate.
+export function defaultWeekSchedule(): WeekSchedule {
+  const day = { working: false, start: '09:00', end: '17:00' };
+  return {
+    mon: { ...day }, tue: { ...day }, wed: { ...day }, thu: { ...day },
+    fri: { ...day }, sat: { ...day }, sun: { ...day },
+  };
+}
+
+// Always return a full week (fills any missing days with a default).
+export function getStaffSchedule(id: string): WeekSchedule {
+  const s = getStaff().find((p) => p.id === id);
+  const base = defaultWeekSchedule();
+  if (s?.schedule) {
+    (Object.keys(base) as WeekDayKey[]).forEach((k) => {
+      if (s.schedule![k]) base[k] = { ...base[k], ...s.schedule![k] };
+    });
+  }
+  return base;
+}
+
+export function setStaffSchedule(id: string, schedule: WeekSchedule): void {
+  updateStaffMember(id, { schedule });
+}
+
+// JS getDay(): 0=Sun..6=Sat  →  our WeekDayKey
+export function todayWeekKey(): WeekDayKey {
+  const map: WeekDayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  return map[new Date().getDay()];
+}
+
+// Total booked minutes in a week (for a quick summary).
+export function scheduleWeeklyMinutes(schedule: WeekSchedule): number {
+  return (Object.keys(schedule) as WeekDayKey[]).reduce((sum, k) => {
+    const d = schedule[k];
+    if (!d.working) return sum;
+    const [sh, sm] = d.start.split(':').map(Number);
+    const [eh, em] = d.end.split(':').map(Number);
+    const mins = (eh * 60 + em) - (sh * 60 + sm);
+    return sum + (mins > 0 ? mins : 0);
+  }, 0);
+}
+
 export function deleteStaffMember(id: string): void {
   recordDeletion(KEYS.staff, id);
   const staff = getStaff().filter((s) => s.id !== id);
@@ -961,4 +1022,97 @@ export function computeAnalytics(
     revenueByHour,
     topProducts,
   };
+}
+
+// ============================================================
+// Loyalty / VIP
+// ============================================================
+
+// Points earned per 1 DT spent, and tier thresholds (by lifetime points).
+export const LOYALTY_POINTS_PER_DT = 1;
+export const LOYALTY_TIERS: { tier: LoyaltyTier; min: number }[] = [
+  { tier: 'Black', min: 2000 },
+  { tier: 'Gold', min: 500 },
+  { tier: 'Silver', min: 0 },
+];
+
+export function loyaltyTierFor(points: number): LoyaltyTier {
+  for (const t of LOYALTY_TIERS) {
+    if (points >= t.min) return t.tier;
+  }
+  return 'Silver';
+}
+
+// Normalize a name/phone into a stable member id.
+export function loyaltyIdFor(input: string): string {
+  return 'loy-' + input.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '');
+}
+
+export function getLoyaltyMembers(): LoyaltyMember[] {
+  return safeRead<LoyaltyMember[]>(KEYS.loyalty, []);
+}
+
+export function saveLoyaltyMembers(members: LoyaltyMember[]): void {
+  atomicWrite(KEYS.loyalty, members);
+}
+
+export function getLoyaltyMember(id: string): LoyaltyMember | undefined {
+  return getLoyaltyMembers().find((m) => m.id === id);
+}
+
+// Create/find a member from a name (or phone). Returns the member id.
+export function upsertLoyaltyMember(name: string, phone?: string): string {
+  const id = loyaltyIdFor(phone || name);
+  const members = getLoyaltyMembers();
+  const idx = members.findIndex((m) => m.id === id);
+  const now = new Date().toISOString();
+  if (idx === -1) {
+    members.push({
+      id, name: name.trim(), phone: phone?.trim() || undefined,
+      points: 0, totalSpent: 0, visits: 0, tier: 'Silver',
+      createdAt: now, updatedAt: now,
+    });
+    saveLoyaltyMembers(members);
+  }
+  return id;
+}
+
+// Award points for a paid order (idempotent — guarded by order.loyaltyAwarded).
+export function awardLoyaltyForOrder(order: Order): void {
+  if (!order.loyaltyId || order.loyaltyAwarded) return;
+  const members = getLoyaltyMembers();
+  const idx = members.findIndex((m) => m.id === order.loyaltyId);
+  if (idx === -1) return;
+  const earned = Math.round(order.total * LOYALTY_POINTS_PER_DT);
+  const m = members[idx];
+  m.points += earned;
+  m.totalSpent += order.total;
+  m.visits += 1;
+  m.tier = loyaltyTierFor(m.points);
+  m.updatedAt = new Date().toISOString();
+  saveLoyaltyMembers(members);
+
+  // Mark the order so points aren't granted twice.
+  const orders = getOrders();
+  const oi = orders.findIndex((o) => o.id === order.id);
+  if (oi !== -1) {
+    orders[oi].loyaltyAwarded = true;
+    saveOrders(orders);
+  }
+}
+
+// Owner: manual point adjustment (+/-).
+export function adjustLoyaltyPoints(id: string, delta: number): void {
+  const members = getLoyaltyMembers();
+  const idx = members.findIndex((m) => m.id === id);
+  if (idx === -1) return;
+  members[idx].points = Math.max(0, members[idx].points + delta);
+  members[idx].tier = loyaltyTierFor(members[idx].points);
+  members[idx].updatedAt = new Date().toISOString();
+  saveLoyaltyMembers(members);
+}
+
+export function deleteLoyaltyMember(id: string): void {
+  recordDeletion(KEYS.loyalty, id);
+  saveLoyaltyMembers(getLoyaltyMembers().filter((m) => m.id !== id));
 }

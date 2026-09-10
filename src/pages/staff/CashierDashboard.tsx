@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Coffee, DollarSign, Check, User, Clock, FileText,
+  Coffee, DollarSign, Check, User, Clock, FileText, Search,
   Utensils, Bell, MessageCircle, X, Armchair, Sparkles, Plus, Minus, Trash2, ShoppingCart,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -22,10 +22,11 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
 import ChatPanel from '@/components/ChatPanel';
 import CategoryIcon from '@/components/CategoryIcon';
+import MySchedule from '@/components/MySchedule';
 import { useApp } from '@/contexts/AppContext';
 import {
   getOrders, addOrder, updateOrderStatus, addPayment, addAuditLog, addNotification,
-  setOrderTable, TABLE_COUNT, getActiveProducts,
+  setOrderTable, TABLE_COUNT, getActiveProducts, awardLoyaltyForOrder,
 } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order, Product, CartItem } from '@/types';
@@ -54,6 +55,7 @@ export default function CashierDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [builderNote, setBuilderNote] = useState('');
+  const [builderSearch, setBuilderSearch] = useState('');
 
   const loadOrders = useCallback(() => {
     const all = getOrders();
@@ -123,6 +125,8 @@ export default function CashierDashboard() {
         user: user?.name || 'Unknown',
         timestamp: now.toISOString(),
       });
+      // Award VIP loyalty points (idempotent) if this order has a member.
+      awardLoyaltyForOrder(order);
       refreshOrders();
       loadOrders();
       setProcessingId(null);
@@ -140,8 +144,19 @@ export default function CashierDashboard() {
 
   // ---- New order builder ---------------------------------------------------
   const openNewOrder = (tableNumber: number) => {
-    setCart([]); setBuilderNote(''); setPickTableOpen(false); setNewOrderTable(tableNumber);
+    setCart([]); setBuilderNote(''); setBuilderSearch(''); setPickTableOpen(false); setNewOrderTable(tableNumber);
   };
+
+  // Products filtered by the picker search box (name / category / description).
+  const builderProducts = products.filter((p) => {
+    const q = builderSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.category.toLowerCase().includes(q) ||
+      (p.description || '').toLowerCase().includes(q)
+    );
+  });
   const addToCart = (p: Product) => setCart((prev) => {
     const ex = prev.find((i) => i.productId === p.id);
     if (ex) return prev.map((i) => i.productId === p.id ? { ...i, quantity: i.quantity + 1 } : i);
@@ -239,6 +254,9 @@ export default function CashierDashboard() {
       </AnimatePresence>
 
       <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-8">
+        {/* My weekly booked hours */}
+        {user && <div className="mb-6"><MySchedule staffId={user.id} /></div>}
+
         {/* Quick actions: Facture + Chat with barista */}
         <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4">
           <button
@@ -451,23 +469,46 @@ export default function CashierDashboard() {
                 <button onClick={() => setNewOrderTable(null)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]"><X className="h-5 w-5" /></button>
               </div>
 
+              {/* Search products */}
+              <div className="flex-shrink-0 px-4 pt-4">
+                <div className="relative">
+                  <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
+                  <input
+                    value={builderSearch}
+                    onChange={(e) => setBuilderSearch(e.target.value)}
+                    placeholder="Rechercher un produit..."
+                    className="w-full rounded-2xl border border-white/[0.08] bg-white/[0.03] py-3 pl-11 pr-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50 transition-colors"
+                  />
+                </div>
+              </div>
+
               <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {products.map((p) => {
+                {builderProducts.map((p) => {
                   const inCart = cart.find((i) => i.productId === p.id);
                   return (
                     <button key={p.id} onClick={() => addToCart(p)}
-                      className="relative flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.05] active:scale-[0.98]">
-                      <div className="mb-2 flex h-16 items-center justify-center rounded-xl bg-white/[0.03] text-3xl">
-                        <CategoryIcon category={p.category} className="h-8 w-8 text-[#D4AF37]" />
+                      className="group relative flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3 text-left transition-all hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.05] active:scale-[0.98]">
+                      <div className="mb-2 flex h-20 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#D4AF37]/10 to-amber-600/5">
+                        {p.image ? (
+                          <img src={p.image} alt={p.name} className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-110" />
+                        ) : (
+                          <CategoryIcon category={p.category} className="h-9 w-9 text-[#D4AF37]/70 group-hover:text-[#D4AF37] transition-colors" strokeWidth={1.1} />
+                        )}
                       </div>
                       <span className="text-sm font-semibold leading-tight line-clamp-2">{p.name}</span>
                       <span className="mt-1 text-xs text-[#D4AF37] font-bold">{p.price.toFixed(2)} DT</span>
                       {inCart && (
-                        <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-black">{inCart.quantity}</span>
+                        <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-black shadow-lg">{inCart.quantity}</span>
                       )}
                     </button>
                   );
                 })}
+                {builderProducts.length === 0 && (
+                  <div className="col-span-2 sm:col-span-3 py-12 text-center text-white/20">
+                    <Search className="mx-auto h-8 w-8 opacity-30" />
+                    <p className="mt-3 text-sm">Aucun produit ne correspond.</p>
+                  </div>
+                )}
               </div>
 
               {/* Cart footer */}

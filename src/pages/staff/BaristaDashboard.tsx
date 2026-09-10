@@ -24,6 +24,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
 import ChatPanel from '@/components/ChatPanel';
+import MySchedule from '@/components/MySchedule';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
@@ -254,6 +255,9 @@ export default function BaristaDashboard() {
       </AnimatePresence>
 
       <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-8">
+        {/* My weekly booked hours */}
+        {user && <div className="mb-6"><MySchedule staffId={user.id} /></div>}
+
         {/* Stats */}
         <div className="mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
           <GlassCard hover={false} className="text-center">

@@ -12,7 +12,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
 import { useApp } from '@/contexts/AppContext';
-import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT } from '@/utils/store';
+import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT, upsertLoyaltyMember } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category } from '@/types';
 
@@ -35,6 +35,7 @@ export default function Menu() {
     return v >= 1 ? v : null;
   });
   const [orderNote, setOrderNote] = useState('');
+  const [loyaltyName, setLoyaltyName] = useState('');
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [finalTotal, setFinalTotal] = useState(0);
@@ -109,6 +110,9 @@ export default function Menu() {
     const tableNumber = selectedTable;
     if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT) return;
     const id = 'ORD-' + String(Date.now()).slice(-6);
+    // Optional loyalty: if the client entered a name/phone, attach a member id
+    // so points are awarded when this order is paid.
+    const loyaltyId = loyaltyName.trim() ? upsertLoyaltyMember(loyaltyName.trim()) : undefined;
     const order = {
       id,
       clientName: `Table ${tableNumber}`,
@@ -117,6 +121,7 @@ export default function Menu() {
       status: 'Pending' as const,
       note: orderNote.trim() || undefined,
       tableNumber,
+      loyaltyId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -153,6 +158,7 @@ export default function Menu() {
     setOrderId(id);
     setFinalTotal(total);
     setOrderNote('');
+    setLoyaltyName('');
     setOrderPlaced(true);
     setCart([]);
     setSelectedTable(null);
@@ -570,6 +576,13 @@ export default function Menu() {
                         onChange={e => setOrderNote(e.target.value)}
                         rows={2}
                         className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 resize-none"
+                      />
+                      <input
+                        type="text"
+                        placeholder={t('cart.loyaltyOptional')}
+                        value={loyaltyName}
+                        onChange={e => setLoyaltyName(e.target.value)}
+                        className="w-full rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/[0.04] py-3 px-4 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#D4AF37]/50"
                       />
                     </div>
                     <button

@@ -51,18 +51,31 @@ try {
 
 // Throttled file save
 let saveTimer = null;
+// Write state to disk immediately (used by the throttled persist + on shutdown).
+function persistNow() {
+  try {
+    const tmp = DATA_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state));
+    fs.renameSync(tmp, DATA_FILE);
+  } catch (e) {
+    console.warn('Persist failed:', e?.message);
+  }
+}
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try {
-      const tmp = DATA_FILE + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(state));
-      fs.renameSync(tmp, DATA_FILE);
-    } catch (e) {
-      console.warn('Persist failed:', e?.message);
-    }
-  }, 500);
+  saveTimer = setTimeout(persistNow, 500);
 }
+
+// Guarantee nothing is lost on redeploy / restart (important on Render's free
+// tier where the instance spins down): flush pending state on shutdown signals.
+function flushAndExit() {
+  if (saveTimer) clearTimeout(saveTimer);
+  persistNow();
+  process.exit(0);
+}
+process.on('SIGTERM', flushAndExit);
+process.on('SIGINT', flushAndExit);
+process.on('beforeExit', persistNow);
 
 const TOMBSTONE_KEY = 'hebli_tombstones';
 

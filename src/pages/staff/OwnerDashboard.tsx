@@ -34,7 +34,7 @@ import {
   Star,
   Calendar,
   Printer,
-  Wifi, WifiOff,
+  Wifi, WifiOff, CalendarDays,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -92,6 +92,13 @@ import {
   addConsumption,
   addAuditLog,
   getCurrentUser,
+  getLoyaltyMembers,
+  adjustLoyaltyPoints,
+  deleteLoyaltyMember,
+  getStaffSchedule,
+  setStaffSchedule,
+  scheduleWeeklyMinutes,
+  WEEK_DAYS,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import { getStaffTitle } from '@/utils/roles';
@@ -115,11 +122,14 @@ import type {
   Invoice,
   Consumption,
   StaffRole,
+  WeekSchedule,
+  WeekDayKey,
+  DaySchedule,
 } from '@/types';
 
 const COLORS = ['#D4AF37', '#F59E0B', '#F97316', '#EF4444', '#8B5CF6', '#06B6D4', '#10B981', '#EC4899'];
 
-type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'reports' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs' | 'settings';
+type Tab = 'dashboard' | 'products' | 'categories' | 'staff' | 'inventory' | 'orders' | 'invoices' | 'reports' | 'analytics' | 'assistant' | 'chat' | 'tickets' | 'logs' | 'settings' | 'loyalty';
 
 const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'dashboard', label: 'Overview', icon: LayoutDashboard },
@@ -133,6 +143,7 @@ const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
   { key: 'analytics', label: 'Analytics', icon: TrendingUp },
   { key: 'chat', label: 'Team Chat', icon: MessageCircle },
   { key: 'tickets', label: 'Tickets', icon: LifeBuoy },
+  { key: 'loyalty', label: 'Loyalty', icon: Star },
   { key: 'assistant', label: 'AI Assistant', icon: Sparkles },
   { key: 'logs', label: 'Audit Logs', icon: FileText },
   { key: 'settings', label: 'Settings', icon: Wifi },
@@ -165,6 +176,7 @@ export default function OwnerDashboard() {
       case 'assistant': return <AIAssistantTab />;
       case 'logs': return <AuditLogsTab />;
       case 'settings': return <SettingsTab />;
+      case 'loyalty': return <LoyaltyTab />;
       default: return null;
     }
   };
@@ -787,6 +799,8 @@ function StaffTab() {
   const [notifText, setNotifText] = useState('');
   // Private chat drawer
   const [chatStaff, setChatStaff] = useState<Staff | null>(null);
+  // Weekly schedule editor (booked hours)
+  const [scheduleStaff, setScheduleStaff] = useState<Staff | null>(null);
   // Salary draft per staff (DT per MINUTE)
   const [salaryDrafts, setSalaryDrafts] = useState<Record<string, string>>({});
 
@@ -1000,12 +1014,15 @@ function StaffTab() {
                 {s.email && <div className="mt-2 text-[10px] text-white/30">{s.email}</div>}
 
                 {/* Actions */}
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   <button onClick={() => setNotifTarget(s)} className="rounded-lg border border-[#D4AF37]/20 bg-[#D4AF37]/5 py-1.5 text-xs text-[#D4AF37] hover:bg-[#D4AF37]/10 transition-colors flex items-center justify-center gap-1">
                     <Bell className="h-3 w-3" /> Notify
                   </button>
                   <button onClick={() => setChatStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
                     <MessageCircle className="h-3 w-3" /> Chat
+                  </button>
+                  <button onClick={() => setScheduleStaff(s)} className="rounded-lg border border-white/[0.08] py-1.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1">
+                    <CalendarDays className="h-3 w-3" /> Horaires
                   </button>
                 </div>
                 <div className="mt-2 flex gap-2">
@@ -1151,7 +1168,94 @@ function StaffTab() {
         </AnimatePresence>,
         document.body
       )}
+
+      {/* Weekly schedule (booked hours) editor */}
+      {scheduleStaff && (
+        <ScheduleEditor
+          staff={scheduleStaff}
+          onClose={() => setScheduleStaff(null)}
+          onSaved={() => { setStaff(getStaff()); addLog('Schedule Updated', `Horaires de ${scheduleStaff.name} mis à jour`); }}
+        />
+      )}
     </div>
+  );
+}
+
+// ============================================================
+// Weekly Schedule Editor (Owner sets booked hours Mon→Sun)
+// ============================================================
+function ScheduleEditor({ staff, onClose, onSaved }: { staff: Staff; onClose: () => void; onSaved: () => void }) {
+  const [week, setWeek] = useState<WeekSchedule>(() => getStaffSchedule(staff.id));
+
+  const setDay = (key: WeekDayKey, patch: Partial<DaySchedule>) => {
+    setWeek((w) => ({ ...w, [key]: { ...w[key], ...patch } }));
+  };
+
+  const save = () => {
+    setStaffSchedule(staff.id, week);
+    onSaved();
+    onClose();
+  };
+
+  const weeklyMin = scheduleWeeklyMinutes(week);
+  const weeklyStr = `${Math.floor(weeklyMin / 60)}h ${weeklyMin % 60}m`;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+        className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#111] p-6 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15"><CalendarDays className="h-5 w-5 text-[#D4AF37]" /></div>
+            <div>
+              <h3 className="text-lg font-bold">Horaires · {staff.name}</h3>
+              <p className="text-xs text-white/40">Lundi → Dimanche · {weeklyStr} / semaine</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1 text-white/30 hover:text-white"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="space-y-2">
+          {WEEK_DAYS.map((d) => {
+            const day = week[d.key];
+            return (
+              <div key={d.key} className={`rounded-xl border p-3 ${day.working ? 'border-[#D4AF37]/20 bg-[#D4AF37]/[0.04]' : 'border-white/[0.05] bg-white/[0.02]'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="w-24 text-sm font-semibold">{d.labelFr}</span>
+                  {day.working ? (
+                    <div className="flex flex-1 items-center justify-end gap-2">
+                      <input type="time" value={day.start} onChange={(e) => setDay(d.key, { start: e.target.value })}
+                        className="rounded-lg border border-white/[0.08] bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-[#D4AF37]/40" />
+                      <span className="text-white/30">–</span>
+                      <input type="time" value={day.end} onChange={(e) => setDay(d.key, { end: e.target.value })}
+                        className="rounded-lg border border-white/[0.08] bg-black/30 px-2 py-1.5 text-xs text-white outline-none focus:border-[#D4AF37]/40" />
+                    </div>
+                  ) : (
+                    <span className="flex-1 text-right text-xs uppercase tracking-wider text-white/25">Repos</span>
+                  )}
+                  <button
+                    onClick={() => setDay(d.key, { working: !day.working })}
+                    className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors ${day.working ? 'bg-[#D4AF37]' : 'bg-white/15'}`}
+                    title={day.working ? 'Jour travaillé' : 'Jour de repos'}
+                  >
+                    <span className={`absolute top-1 h-4 w-4 rounded-full bg-black transition-all ${day.working ? 'left-6' : 'left-1'}`} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          <button onClick={onClose} className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5">Annuler</button>
+          <button onClick={save} className="flex-1 rounded-xl bg-[#D4AF37] py-2.5 text-sm font-bold text-black hover:bg-amber-400">Enregistrer</button>
+        </div>
+      </motion.div>
+    </div>,
+    document.body
   );
 }
 
@@ -3200,6 +3304,109 @@ function SettingsTab() {
           </div>
         </div>
       </GlassCard>
+    </div>
+  );
+}
+
+// ============================================================
+// Loyalty / VIP Tab (Owner)
+// ============================================================
+function LoyaltyTab() {
+  const [members, setMembers] = useState(getLoyaltyMembers());
+  const [search, setSearch] = useState('');
+
+  const reload = () => setMembers(getLoyaltyMembers());
+
+  const filtered = members
+    .filter((m) => {
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return m.name.toLowerCase().includes(q) || (m.phone || '').toLowerCase().includes(q);
+    })
+    .sort((a, b) => b.points - a.points);
+
+  const tierStyle = (tier: string) =>
+    tier === 'Black'
+      ? 'bg-white/[0.08] text-white border-white/20'
+      : tier === 'Gold'
+      ? 'bg-[#D4AF37]/15 text-[#D4AF37] border-[#D4AF37]/30'
+      : 'bg-slate-400/10 text-slate-300 border-slate-400/20';
+
+  const totalPoints = members.reduce((s, m) => s + m.points, 0);
+  const totalSpent = members.reduce((s, m) => s + m.totalSpent, 0);
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2"><Star className="h-5 w-5 text-[#D4AF37]" /> Loyalty / VIP</h2>
+          <p className="text-sm text-white/40">Membres, points et niveaux (Silver · Gold · Black).</p>
+        </div>
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/20" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Rechercher un membre..."
+            className="rounded-2xl border border-white/[0.08] bg-white/[0.03] py-2.5 pl-10 pr-4 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50"
+          />
+        </div>
+      </div>
+
+      <div className="mb-6 grid grid-cols-3 gap-3">
+        <GlassCard hover={false} className="text-center">
+          <div className="text-2xl font-bold text-[#D4AF37]">{members.length}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">Membres</div>
+        </GlassCard>
+        <GlassCard hover={false} className="text-center">
+          <div className="text-2xl font-bold text-emerald-400">{totalPoints}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">Points cumulés</div>
+        </GlassCard>
+        <GlassCard hover={false} className="text-center">
+          <div className="text-2xl font-bold text-blue-400">{totalSpent.toFixed(0)} DT</div>
+          <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">Dépensé (total)</div>
+        </GlassCard>
+      </div>
+
+      {filtered.length === 0 ? (
+        <div className="py-16 text-center text-white/20">
+          <Star className="mx-auto h-10 w-10 opacity-30" />
+          <p className="mt-3 text-sm">Aucun membre VIP pour l'instant.</p>
+          <p className="mt-1 text-xs text-white/15">Les clients gagnent des points en laissant leur nom au moment de commander.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((m) => (
+            <GlassCard key={m.id} hover={false} className="p-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">{m.name}</span>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tierStyle(m.tier)}`}>
+                      {m.tier}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-white/40">
+                    {m.visits} visite{m.visits !== 1 ? 's' : ''} · {m.totalSpent.toFixed(2)} DT dépensés
+                    {m.phone ? ` · ${m.phone}` : ''}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-[#D4AF37]">{m.points}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-white/30">points</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => { adjustLoyaltyPoints(m.id, -10); reload(); }} className="rounded-lg border border-white/10 px-2 py-1 text-xs text-white/60 hover:bg-white/[0.05]">−10</button>
+                    <button onClick={() => { adjustLoyaltyPoints(m.id, 10); reload(); }} className="rounded-lg border border-[#D4AF37]/30 bg-[#D4AF37]/[0.08] px-2 py-1 text-xs text-[#D4AF37] hover:bg-[#D4AF37]/[0.16]">+10</button>
+                    <button onClick={() => { if (confirm(`Supprimer ${m.name} ?`)) { deleteLoyaltyMember(m.id); reload(); } }} className="rounded-lg p-1.5 text-red-400/70 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
