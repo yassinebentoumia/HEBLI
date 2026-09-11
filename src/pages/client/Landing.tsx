@@ -41,9 +41,8 @@ export default function Landing() {
       {/* Top Navigation Bar */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5">
-            <HebliMark className="h-7 w-7" />
-            <span className="text-xl font-bold tracking-[0.15em] text-[#D4AF37]">HEBLI</span>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center" aria-label="HEBLI">
+            <HebliMark className="h-9 w-9" />
           </button>
 
           {/* Desktop Nav */}
@@ -153,6 +152,16 @@ export default function Landing() {
             </span>
           </motion.div>
 
+          {/* Centered brand mark above the wordmark (full logo, Concept 1) */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-6 flex justify-center"
+          >
+            <HebliMark className="h-20 w-20 sm:h-28 sm:w-28 drop-shadow-[0_8px_30px_rgba(212,175,55,0.25)]" />
+          </motion.div>
+
           {/* HEBLI wordmark — animated letter-by-letter reveal with shimmer */}
           <div className="relative">
             <h1 className="relative text-[18vw] sm:text-8xl md:text-9xl font-black tracking-[-0.05em] leading-none flex justify-center">
@@ -190,6 +199,21 @@ export default function Landing() {
               className="mt-6 mx-auto h-px bg-gradient-to-r from-transparent via-[#D4AF37]/60 to-transparent"
             />
           </div>
+
+          {/* Brand tagline line (matches the logo) */}
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0, duration: 0.8 }}
+            className="mt-5 flex flex-col items-center gap-2"
+          >
+            <div className="text-[11px] sm:text-sm font-medium tracking-[0.4em] text-white/55 uppercase">
+              Coffee × Working Space
+            </div>
+            <div className="flex items-center gap-2 text-[9px] tracking-[0.4em] text-white/30 uppercase">
+              <span className="h-px w-6 bg-white/20" /> Est. 2025 <span className="h-px w-6 bg-white/20" />
+            </div>
+          </motion.div>
 
           {/* Sub-tagline */}
           <motion.p
