@@ -221,9 +221,7 @@ export default function CashierDashboard() {
       <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 flex-shrink-0">
-              <HebliMark className="h-6 w-6 sm:h-7 sm:w-7" />
-            </div>
+            <HebliMark className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0" />
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
                 <span className="text-[#D4AF37] tracking-[0.15em]">HEBLI</span>{' '}

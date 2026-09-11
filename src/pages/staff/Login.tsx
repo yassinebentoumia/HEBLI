@@ -84,9 +84,9 @@ export default function StaffLogin() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D4AF37]/10"
+            className="mx-auto mb-4 flex items-center justify-center"
           >
-            <HebliMark className="h-9 w-9" />
+            <HebliMark className="h-16 w-16" rounded="rounded-2xl" />
           </motion.div>
 
           <h2 className="text-2xl font-bold tracking-tight">

@@ -1,67 +1,76 @@
 // ============================================================
 // HEBLI – Brand Logo
-// Renders your real logo file from /public/logo.png everywhere.
-// Just replace public/logo.png with your own image and it updates
-// across the whole app (headers, landing, login, loading, badge).
+// Your real logo (public/logo.png) is DARK olive-green on a
+// transparent background. On the dark app it would vanish, so we
+// place it on a light "paper/stone" card (like the brand mockups)
+// inside a gold-ringed frame → crisp + luxurious everywhere.
+// Just replace public/logo.png with your file.
 // ============================================================
 
-interface MarkProps {
-  className?: string; // sizing (h-/w-)
-}
-
-// Path to your uploaded logo. Put your file at: public/logo.png
 export const LOGO_SRC = '/logo.png';
 
-// The brand mark (your logo image). Used in headers, badges, hero, etc.
-export function HebliMark({ className = 'h-8 w-8' }: MarkProps) {
+// Light "stone/cream" surface the dark-green logo sits on (matches the mockups).
+const CARD_BG = 'bg-gradient-to-br from-[#F3EEE3] to-[#E7DECB]';
+
+interface MarkProps {
+  className?: string; // outer sizing (h-/w-)
+  rounded?: string;   // corner radius util
+}
+
+// Small brand chip for dark headers (logo on a light rounded card).
+export function HebliMark({ className = 'h-9 w-9', rounded = 'rounded-xl' }: MarkProps) {
   return (
-    <img
-      src={LOGO_SRC}
-      alt="HEBLI"
-      className={`${className} object-contain select-none`}
-      draggable={false}
-    />
+    <span
+      className={`inline-flex items-center justify-center ${rounded} ${CARD_BG} ${className} p-1 ring-1 ring-[#D4AF37]/40 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)]`}
+    >
+      <img src={LOGO_SRC} alt="HEBLI" className="h-full w-full object-contain select-none" draggable={false} />
+    </span>
   );
 }
 
-// Full lockup: logo + "HEBLI" wordmark + tagline.
+// Raw logo image (use on already-light backgrounds: print, invoices, reports).
+export function HebliPlain({ className = 'h-10' }: { className?: string }) {
+  return <img src={LOGO_SRC} alt="HEBLI" className={`${className} object-contain select-none`} draggable={false} />;
+}
+
+// Big hero logo for the Landing page: logo on a light stone card, gold ring,
+// warm glow — auto-sized and always premium (works with a transparent logo).
+export function HebliHeroLogo({ className = '' }: { className?: string }) {
+  return (
+    <div className={`relative mx-auto inline-flex items-center justify-center ${className}`}>
+      {/* warm gold glow behind the card */}
+      <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] bg-[#D4AF37]/20 blur-3xl" />
+      {/* light stone card with gold ring (mirrors the printed mockup) */}
+      <div
+        className={`relative flex items-center justify-center rounded-[1.75rem] ${CARD_BG} p-8 sm:p-12 ring-1 ring-[#D4AF37]/50 shadow-[0_30px_90px_-20px_rgba(0,0,0,0.7)]`}
+      >
+        {/* thin inner gold hairline for a framed, luxury feel */}
+        <div className="pointer-events-none absolute inset-3 rounded-[1.35rem] border border-[#6B5B2E]/15" />
+        <img
+          src={LOGO_SRC}
+          alt="HEBLI — Coffee × Working Space"
+          className="relative h-40 w-40 sm:h-56 sm:w-56 object-contain select-none"
+          draggable={false}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Full inline lockup (logo chip + wordmark + tagline) — optional.
 export function HebliLogo({
   className = '',
   size = 'md',
   tagline = true,
-  stacked = false,
-  est = false,
 }: {
   className?: string;
   size?: 'sm' | 'md' | 'lg' | 'xl';
   tagline?: boolean;
-  stacked?: boolean;
-  est?: boolean;
 }) {
   const mark =
-    size === 'xl' ? 'h-24 w-24' : size === 'lg' ? 'h-16 w-16' : size === 'sm' ? 'h-8 w-8' : 'h-11 w-11';
+    size === 'xl' ? 'h-20 w-20' : size === 'lg' ? 'h-14 w-14' : size === 'sm' ? 'h-8 w-8' : 'h-11 w-11';
   const word =
     size === 'xl' ? 'text-5xl sm:text-7xl' : size === 'lg' ? 'text-4xl' : size === 'sm' ? 'text-lg' : 'text-2xl';
-
-  if (stacked) {
-    return (
-      <div className={`flex flex-col items-center ${className}`}>
-        <HebliMark className={mark} />
-        <div className={`mt-3 ${word} font-bold tracking-[0.35em] text-[#D4AF37]`}>HEBLI</div>
-        {tagline && (
-          <div className="mt-2 text-[10px] sm:text-xs font-medium tracking-[0.4em] text-white/50 uppercase">
-            Coffee × Working Space
-          </div>
-        )}
-        {est && (
-          <div className="mt-2 flex items-center gap-2 text-[9px] tracking-[0.4em] text-white/30 uppercase">
-            <span className="h-px w-6 bg-white/20" /> Est. 2025 <span className="h-px w-6 bg-white/20" />
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <HebliMark className={mark} />
@@ -72,27 +81,6 @@ export function HebliLogo({
             Coffee × Working Space
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// Big hero logo for the Landing page. Auto-sizes to the viewport, and sits on a
-// subtle luxury frame (forest glow + gold ring) so a transparent OR solid logo
-// always looks premium.
-export function HebliHeroLogo({ className = '' }: { className?: string }) {
-  return (
-    <div className={`relative mx-auto inline-flex items-center justify-center ${className}`}>
-      {/* soft gold glow behind the logo */}
-      <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-[#D4AF37]/15 blur-3xl" />
-      {/* luxury circular frame */}
-      <div className="relative flex items-center justify-center rounded-full border border-[#D4AF37]/25 bg-gradient-to-b from-white/[0.06] to-transparent p-6 sm:p-8 shadow-[0_20px_80px_-20px_rgba(212,175,55,0.4)] backdrop-blur-sm">
-        <img
-          src={LOGO_SRC}
-          alt="HEBLI — Coffee × Working Space"
-          className="h-32 w-32 sm:h-44 sm:w-44 object-contain select-none"
-          draggable={false}
-        />
       </div>
     </div>
   );
