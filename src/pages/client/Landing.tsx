@@ -11,7 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getActiveProducts, getCategories } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
-import { HebliMark } from '@/components/Logo';
+import { HebliMark, HebliHeroLogo } from '@/components/Logo';
 import { useT } from '@/i18n/I18nProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import InstallAppButton from '@/components/InstallAppButton';
@@ -153,51 +153,22 @@ export default function Landing() {
             </span>
           </motion.div>
 
-          {/* Centered brand mark above the wordmark (full logo, Concept 1) */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-            className="mb-6 flex justify-center"
-          >
-            <HebliMark className="h-20 w-20 sm:h-28 sm:w-28 drop-shadow-[0_8px_30px_rgba(212,175,55,0.25)]" />
-          </motion.div>
-
-          {/* HEBLI wordmark — animated letter-by-letter reveal with shimmer */}
+          {/* HEBLI logo (image) — replaces the text wordmark on the main page */}
           <div className="relative">
-            <h1 className="relative text-[18vw] sm:text-8xl md:text-9xl font-black tracking-[-0.05em] leading-none flex justify-center">
-              {'HEBLI'.split('').map((char, i) => (
-                <motion.span
-                  key={i}
-                  initial={{ opacity: 0, y: 80, rotate: -8 }}
-                  animate={{ opacity: 1, y: 0, rotate: 0 }}
-                  transition={{ delay: 0.15 + i * 0.08, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-                  className="relative inline-block"
-                >
-                  <span className="bg-gradient-to-b from-[#FFE8A3] via-[#D4AF37] to-[#8C6F1F] bg-clip-text text-transparent">
-                    {char}
-                  </span>
-                </motion.span>
-              ))}
-            </h1>
-            {/* Animated gold shimmer overlay sweeping across */}
             <motion.div
-              className="pointer-events-none absolute inset-0"
-              initial={{ x: '-100%' }}
-              animate={{ x: '200%' }}
-              transition={{ duration: 3.5, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }}
+              initial={{ opacity: 0, scale: 0.85, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+              className="flex justify-center"
             >
-              <div
-                className="h-full w-1/3 bg-gradient-to-r from-transparent via-white/15 to-transparent"
-                style={{ transform: 'skewX(-20deg)' }}
-              />
+              <HebliHeroLogo />
             </motion.div>
             {/* Underline */}
             <motion.div
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 96, opacity: 1 }}
               transition={{ delay: 0.9, duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-6 mx-auto h-px bg-gradient-to-r from-transparent via-[#D4AF37]/60 to-transparent"
+              className="mt-8 mx-auto h-px bg-gradient-to-r from-transparent via-[#D4AF37]/60 to-transparent"
             />
           </div>
 

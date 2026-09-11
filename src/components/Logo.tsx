@@ -77,4 +77,25 @@ export function HebliLogo({
   );
 }
 
+// Big hero logo for the Landing page. Auto-sizes to the viewport, and sits on a
+// subtle luxury frame (forest glow + gold ring) so a transparent OR solid logo
+// always looks premium.
+export function HebliHeroLogo({ className = '' }: { className?: string }) {
+  return (
+    <div className={`relative mx-auto inline-flex items-center justify-center ${className}`}>
+      {/* soft gold glow behind the logo */}
+      <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-[#D4AF37]/15 blur-3xl" />
+      {/* luxury circular frame */}
+      <div className="relative flex items-center justify-center rounded-full border border-[#D4AF37]/25 bg-gradient-to-b from-white/[0.06] to-transparent p-6 sm:p-8 shadow-[0_20px_80px_-20px_rgba(212,175,55,0.4)] backdrop-blur-sm">
+        <img
+          src={LOGO_SRC}
+          alt="HEBLI — Coffee × Working Space"
+          className="h-32 w-32 sm:h-44 sm:w-44 object-contain select-none"
+          draggable={false}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default HebliLogo;

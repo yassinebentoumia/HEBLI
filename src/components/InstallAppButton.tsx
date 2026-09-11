@@ -56,18 +56,22 @@ export default function InstallAppButton() {
     }
   };
 
-  // Only show if either we have a deferred prompt OR we're on iOS Safari
-  if (!deferred && !isIOS) return null;
+  // Always offer the "Installer" button (if the native prompt isn't ready yet or
+  // we're on iOS, we show a short how-to instead of hiding it).
+  const openInstall = async () => {
+    if (deferred) return handleClick();
+    setShowIOSHelp(true); // reuse the help dialog as generic install instructions
+  };
 
   return (
     <>
       <button
-        onClick={handleClick}
-        className="flex items-center gap-1.5 rounded-xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 px-2.5 sm:px-3 py-2 text-[11px] sm:text-xs font-semibold text-[#D4AF37] hover:bg-[#D4AF37]/20 transition-colors"
-        title="Install HEBLI as an app"
+        onClick={openInstall}
+        className="flex items-center gap-1.5 rounded-xl border border-[#D4AF37]/40 bg-gradient-to-r from-[#D4AF37]/15 to-amber-600/10 px-3 sm:px-3.5 py-2 text-[11px] sm:text-xs font-semibold text-[#D4AF37] hover:from-[#D4AF37]/25 hover:to-amber-600/20 hover:border-[#D4AF37]/60 transition-all active:scale-[0.97] shadow-[0_6px_20px_-8px_rgba(212,175,55,0.5)]"
+        title="Installer l'application HEBLI"
       >
         <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-        <span className="hidden sm:inline uppercase tracking-wider">Install App</span>
+        <span className="uppercase tracking-wider">Installer</span>
       </button>
 
       <AnimatePresence>
@@ -91,8 +95,8 @@ export default function InstallAppButton() {
                   <Smartphone className="h-5 w-5 text-[#D4AF37]" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-base font-bold">Install on iPhone</h3>
-                  <p className="text-xs text-white/40">Add HEBLI to your home screen — no app store needed.</p>
+                  <h3 className="text-base font-bold">Installer HEBLI</h3>
+                  <p className="text-xs text-white/40">Ajoutez HEBLI à votre écran d'accueil — sans store. Sur iPhone : Safari → Partager → « Sur l'écran d'accueil ». Sur Android/PC : menu ⋮ → « Installer l'application ».</p>
                 </div>
                 <button onClick={() => setShowIOSHelp(false)} className="text-white/40 hover:text-white">
                   <X className="h-4 w-4" />

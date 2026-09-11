@@ -8,6 +8,7 @@ import { AppProvider } from '@/contexts/AppContext';
 import { I18nProvider } from '@/i18n/I18nProvider';
 import LoadingScreen from '@/components/LoadingScreen';
 import AccessGate from '@/components/AccessGate';
+import RequireAuth from '@/components/RequireAuth';
 
 // Lazy-loaded pages
 import { lazy, Suspense } from 'react';
@@ -59,13 +60,14 @@ export default function App() {
               <Route path="/client/track" element={<AccessGate><TrackOrder /></AccessGate>} />
               <Route path="/client/support" element={<AccessGate><Support /></AccessGate>} />
 
-              {/* Staff Portal */}
+              {/* Staff Portal — protected. Direct URL access requires login;
+                  /owner additionally requires the Administrator role. */}
               <Route path="/staff" element={<StaffLogin />} />
-              <Route path="/barista" element={<BaristaDashboard />} />
-            <Route path="/cashier" element={<CashierDashboard />} />
-            <Route path="/cashier/invoice" element={<CreateInvoice />} />
-            <Route path="/owner" element={<OwnerDashboard />} />
-            <Route path="/report" element={<ShiftReport />} />
+              <Route path="/barista" element={<RequireAuth><BaristaDashboard /></RequireAuth>} />
+              <Route path="/cashier" element={<RequireAuth><CashierDashboard /></RequireAuth>} />
+              <Route path="/cashier/invoice" element={<RequireAuth><CreateInvoice /></RequireAuth>} />
+              <Route path="/owner" element={<RequireAuth role="Administrator"><OwnerDashboard /></RequireAuth>} />
+              <Route path="/report" element={<RequireAuth role="Administrator"><ShiftReport /></RequireAuth>} />
 
               {/* Fallback */}
               <Route path="*" element={<Navigate to="/" replace />} />
