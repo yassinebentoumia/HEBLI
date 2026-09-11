@@ -23,7 +23,6 @@ import {
   Activity,
   DollarSign,
   Zap,
-  Shield,
   PackageOpen,
   MessageCircle,
   LifeBuoy,
@@ -101,6 +100,7 @@ import {
   WEEK_DAYS,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
+import { HebliMark } from '@/components/Logo';
 import { getStaffTitle } from '@/utils/roles';
 import CategoryIcon from '@/components/CategoryIcon';
 
@@ -151,7 +151,7 @@ const tabs: { key: Tab; label: string; icon: typeof LayoutDashboard }[] = [
 const staffRoles: StaffRole[] = ['Barista', 'Cashier', 'Administrator'];
 export default function OwnerDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser } = useApp();
+  const { logoutUser } = useApp();
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [loading, setLoading] = useState(true);
 
@@ -182,19 +182,19 @@ export default function OwnerDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0B1512] text-white">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-600 flex-shrink-0">
-              <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-black" />
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 flex-shrink-0">
+              <HebliMark className="h-6 w-6 sm:h-7 sm:w-7" />
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
-                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">Owner</span>
+                <span className="text-[#D4AF37] tracking-[0.15em]">HEBLI</span> <span className="hidden sm:inline">Owner</span>
               </h1>
-              <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
+              <p className="text-[9px] sm:text-[10px] text-white/35 truncate tracking-[0.2em] uppercase">Coffee × Working Space</p>
             </div>
           </div>
 
@@ -343,7 +343,7 @@ function OverviewTab() {
               <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} DT`} />
               <Tooltip
-                contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
+                contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
                 formatter={(value: any) => [`${Number(value).toFixed(2)} DT`, 'Revenue']}
               />
               <Area type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} fill="url(#revGrad)" />
@@ -525,9 +525,9 @@ function ProductsTab() {
             onChange={(e) => setFilterCat(e.target.value)}
             className="rounded-xl border border-white/[0.08] bg-white/[0.03] py-2 px-4 text-sm text-white/70 outline-none"
           >
-            <option value="All" className="bg-[#111]">All Categories</option>
+            <option value="All" className="bg-[#12211C]">All Categories</option>
             {getCategories().map((c) => (
-              <option key={c.id} value={c.name} className="bg-[#111]">{c.name}</option>
+              <option key={c.id} value={c.name} className="bg-[#12211C]">{c.name}</option>
             ))}
           </select>
         </div>
@@ -585,7 +585,7 @@ function ProductsTab() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] p-6"
+              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#12211C] p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
@@ -604,7 +604,7 @@ function ProductsTab() {
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/70 outline-none"
                 >
                   {getCategories().map((c) => (
-                    <option key={c.id} value={c.name} className="bg-[#111]">{c.name}</option>
+                    <option key={c.id} value={c.name} className="bg-[#12211C]">{c.name}</option>
                   ))}
                 </select>
                 <textarea placeholder="Description" value={form.description}
@@ -739,7 +739,7 @@ function CategoriesTab() {
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] p-6"
+              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#12211C] p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
@@ -1055,7 +1055,7 @@ function StaffTab() {
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] p-6"
+              className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#12211C] p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
@@ -1071,7 +1071,7 @@ function StaffTab() {
                   onChange={(e) => setForm({ ...form, role: e.target.value as StaffRole })}
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/70 outline-none"
                 >
-                  {staffRoles.map((r) => <option key={r} value={r} className="bg-[#111]">{r}</option>)}
+                  {staffRoles.map((r) => <option key={r} value={r} className="bg-[#12211C]">{r}</option>)}
                 </select>
                 <input type="text" placeholder="PIN (4 digits)" value={form.pin}
                   onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
@@ -1103,7 +1103,7 @@ function StaffTab() {
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] p-6"
+                className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#12211C] p-6"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-4">
@@ -1139,9 +1139,9 @@ function StaffTab() {
               <motion.div
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col"
               >
-                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0B1512] flex-shrink-0">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15">
                       <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
@@ -1204,7 +1204,7 @@ function ScheduleEditor({ staff, onClose, onSaved }: { staff: Staff; onClose: ()
     <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-        className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#111] p-6 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#12211C] p-6 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-center justify-between">
@@ -1609,9 +1609,9 @@ function InventoryTab() {
               <motion.div
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col"
               >
-                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A]">
+                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0B1512]">
                   <div>
                     <h2 className="text-xl font-bold capitalize">{openGroup.displayName}</h2>
                     <p className="text-xs text-white/40 mt-0.5">
@@ -1698,9 +1698,9 @@ function InventoryTab() {
               <motion.div
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[480px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col"
               >
-                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A]">
+                <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-[#0B1512]">
                   <div>
                     <button onClick={() => setOpenVariant(null)} className="text-[11px] text-white/40 hover:text-white mb-1 flex items-center gap-1">
                       ← Back to {openGroup?.displayName}
@@ -1764,7 +1764,7 @@ function InventoryTab() {
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111] p-6"
+                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#12211C] p-6"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-start gap-3 mb-5">
@@ -1890,7 +1890,7 @@ function AnalyticsTab() {
               <CartesianGrid stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} />
               <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} tickFormatter={(v) => `${v} DT`} />
-              <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+              <Tooltip contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
               <Area type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} fill="url(#revGrad2)" />
             </AreaChart>
           </ResponsiveContainer>
@@ -1911,7 +1911,7 @@ function AnalyticsTab() {
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+                <Tooltip contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
               </RPieChart>
             </ResponsiveContainer>
           ) : (
@@ -1949,7 +1949,7 @@ function AnalyticsTab() {
               <CartesianGrid stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="hour" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} tickFormatter={(h) => `${h}:00`} />
               <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
+              <Tooltip contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
               <Bar dataKey="orders" fill="#D4AF37" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -2115,7 +2115,7 @@ function AIAssistantTab() {
           <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#D4AF37] to-amber-600 text-black">
             <Sparkles className="h-4 w-4" />
             {provider && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0A0A0A] bg-green-400" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[#0B1512] bg-green-400" />
             )}
           </div>
           <div>
@@ -2659,7 +2659,7 @@ function OrdersTab() {
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#111] p-6"
+                className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#12211C] p-6"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center gap-3 mb-4">
@@ -2961,7 +2961,7 @@ function InvoicesTab() {
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-                className="w-full max-w-2xl rounded-2xl border border-white/[0.08] bg-[#111] my-8"
+                className="w-full max-w-2xl rounded-2xl border border-white/[0.08] bg-[#12211C] my-8"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
@@ -3089,7 +3089,7 @@ function ReportsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/[0.06] bg-[#0C0C0C] p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0E1A16] p-6">
         <h2 className="text-lg font-bold mb-1 flex items-center gap-2">
           <FileText className="h-5 w-5 text-[#D4AF37]" /> Generate Shift Report
         </h2>
@@ -3105,9 +3105,9 @@ function ReportsTab() {
               onChange={(e) => setCashier(e.target.value)}
               className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
             >
-              <option value="All Cashiers" className="bg-[#111]">All Cashiers</option>
+              <option value="All Cashiers" className="bg-[#12211C]">All Cashiers</option>
               {cashiers.map((s) => (
-                <option key={s.id} value={s.name} className="bg-[#111]">{s.name}</option>
+                <option key={s.id} value={s.name} className="bg-[#12211C]">{s.name}</option>
               ))}
             </select>
           </div>
@@ -3119,9 +3119,9 @@ function ReportsTab() {
               onChange={(e) => setShift(e.target.value as 'day' | 'night' | 'all')}
               className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
             >
-              <option value="all" className="bg-[#111]">All hours</option>
-              <option value="day" className="bg-[#111]">☀️ Jour (06:00–18:00)</option>
-              <option value="night" className="bg-[#111]">🌙 Nuit (18:00–06:00)</option>
+              <option value="all" className="bg-[#12211C]">All hours</option>
+              <option value="day" className="bg-[#12211C]">☀️ Jour (06:00–18:00)</option>
+              <option value="night" className="bg-[#12211C]">🌙 Nuit (18:00–06:00)</option>
             </select>
           </div>
 
@@ -3132,9 +3132,9 @@ function ReportsTab() {
               onChange={(e) => setPeriod(e.target.value as 'day' | 'week' | 'month')}
               className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm text-white outline-none focus:border-[#D4AF37]/50"
             >
-              <option value="day" className="bg-[#111]">📅 Jour</option>
-              <option value="week" className="bg-[#111]">🗓 Semaine</option>
-              <option value="month" className="bg-[#111]">📆 Mois</option>
+              <option value="day" className="bg-[#12211C]">📅 Jour</option>
+              <option value="week" className="bg-[#12211C]">🗓 Semaine</option>
+              <option value="month" className="bg-[#12211C]">📆 Mois</option>
             </select>
           </div>
 
@@ -3157,7 +3157,7 @@ function ReportsTab() {
       </div>
 
       {/* Quick presets */}
-      <div className="rounded-2xl border border-white/[0.06] bg-[#0C0C0C] p-6">
+      <div className="rounded-2xl border border-white/[0.06] bg-[#0E1A16] p-6">
         <h3 className="text-sm font-semibold tracking-wider uppercase text-white/40 mb-4">Quick Presets</h3>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[

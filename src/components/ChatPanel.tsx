@@ -163,7 +163,7 @@ export default function ChatPanel({
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className={`absolute top-7 ${isMine ? 'right-0' : 'left-0'} z-10 rounded-lg border border-white/10 bg-[#1a1a1a] shadow-2xl py-1 min-w-[140px]`}
+                      className={`absolute top-7 ${isMine ? 'right-0' : 'left-0'} z-10 rounded-lg border border-white/10 bg-[#12211C] shadow-2xl py-1 min-w-[140px]`}
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
@@ -214,7 +214,7 @@ export default function ChatPanel({
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#111] p-6"
+              className="w-full max-w-sm rounded-2xl border border-red-500/30 bg-[#12211C] p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start gap-3 mb-4">

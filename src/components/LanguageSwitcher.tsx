@@ -54,7 +54,7 @@ export default function LanguageSwitcher({ variant = 'pill' }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="absolute end-0 top-full mt-2 w-44 rounded-xl border border-white/[0.08] bg-[#0C0C0C] shadow-2xl shadow-black/50 overflow-hidden z-50"
+            className="absolute end-0 top-full mt-2 w-44 rounded-xl border border-white/[0.08] bg-[#0E1A16] shadow-2xl shadow-black/50 overflow-hidden z-50"
           >
             {langs.map((l) => {
               const info = LANG_LABELS[l];

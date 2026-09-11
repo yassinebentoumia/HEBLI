@@ -25,6 +25,7 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import StaffTopBar from '@/components/StaffTopBar';
 import ChatPanel from '@/components/ChatPanel';
 import MySchedule from '@/components/MySchedule';
+import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
 import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
@@ -187,17 +188,17 @@ export default function BaristaDashboard() {
     .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0B1512] text-white">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center gap-2 sm:gap-4 px-3 sm:px-4 py-3 flex-wrap">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-[#D4AF37]/10 flex-shrink-0">
-              <Coffee className="h-4 w-4 sm:h-5 sm:w-5 text-[#D4AF37]" />
+              <HebliMark className="h-6 w-6 sm:h-7 sm:w-7" />
             </div>
             <div className="min-w-0">
               <h1 className="text-base sm:text-lg font-bold tracking-tight truncate">
-                <span className="text-[#D4AF37]">HEBLI</span> <span className="hidden sm:inline">{user ? getStaffTitle(user) : 'Barista'}</span>
+                <span className="text-[#D4AF37] tracking-[0.15em]">HEBLI</span> <span className="hidden sm:inline">{user ? getStaffTitle(user) : 'Barista'}</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-white/30 truncate">{user?.name}</p>
             </div>
@@ -246,7 +247,7 @@ export default function BaristaDashboard() {
             exit={{ y: -60, opacity: 0 }}
             className="fixed left-1/2 top-4 z-50 -translate-x-1/2"
           >
-            <div className="flex items-center gap-3 rounded-2xl border border-[#D4AF37]/30 bg-[#111] px-6 py-3 shadow-2xl shadow-[#D4AF37]/10">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#D4AF37]/30 bg-[#12211C] px-6 py-3 shadow-2xl shadow-[#D4AF37]/10">
               <Bell className="h-4 w-4 text-[#D4AF37]" />
               <span className="text-sm font-medium">{notification}</span>
             </div>
@@ -569,8 +570,8 @@ export default function BaristaDashboard() {
               className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
             <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col">
-              <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+              className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col">
+              <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0B1512] flex-shrink-0">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15 flex-shrink-0">
                     <MessageCircle className="h-5 w-5 text-[#D4AF37]" />

@@ -85,8 +85,8 @@ export default function TrackOrder() {
 
   if (!clientName) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] text-white">
-        <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <div className="min-h-screen bg-[#0B1512] text-white">
+        <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
           <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-4">
             <button onClick={() => navigate('/')} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5 transition-colors">
               <ArrowLeft className="h-5 w-5" />
@@ -126,8 +126,8 @@ export default function TrackOrder() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+    <div className="min-h-screen bg-[#0B1512] text-white">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-4xl items-center gap-4 px-4 py-4">
           <button onClick={() => navigate('/')} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/5 transition-colors">
             <ArrowLeft className="h-5 w-5" />

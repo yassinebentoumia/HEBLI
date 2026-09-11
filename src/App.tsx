@@ -25,7 +25,7 @@ const ShiftReport = lazy(() => import('@/pages/staff/ShiftReport'));
 
 function PageLoader() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A]">
+    <div className="flex min-h-screen items-center justify-center bg-[#0B1512]">
       <div className="flex flex-col items-center gap-4">
         <div className="flex gap-1.5">
           {[0, 1, 2].map((i) => (

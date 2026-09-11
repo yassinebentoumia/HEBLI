@@ -46,7 +46,7 @@ export default function AccessGate({ children }: { children: React.ReactNode }) 
 
   if (state === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A]">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B1512]">
         <Loader2 className="h-8 w-8 animate-spin text-[#D4AF37]" />
       </div>
     );
@@ -54,7 +54,7 @@ export default function AccessGate({ children }: { children: React.ReactNode }) 
 
   if (state === 'blocked') {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0A0A0A] px-6 text-center text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B1512] px-6 text-center text-white">
         <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-red-500/10 border border-red-500/20">
           <WifiOff className="h-10 w-10 text-red-400" />
         </div>

@@ -184,7 +184,7 @@ export default function CameraScanner({ mode, staffName, savedFaceData, onClose,
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4">
-      <div className="relative w-full max-w-md bg-[#111] rounded-3xl border border-white/[0.08] overflow-hidden shadow-2xl">
+      <div className="relative w-full max-w-md bg-[#12211C] rounded-3xl border border-white/[0.08] overflow-hidden shadow-2xl">
         
         {/* Header */}
         <div className="absolute top-0 left-0 right-0 z-10 p-4 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent">
@@ -252,7 +252,7 @@ export default function CameraScanner({ mode, staffName, savedFaceData, onClose,
         </div>
 
         {/* Footer / Controls */}
-        <div className="p-6 bg-[#111] border-t border-white/[0.08]">
+        <div className="p-6 bg-[#12211C] border-t border-white/[0.08]">
           {status === 'idle' && (
             <button 
               onClick={handleScan}

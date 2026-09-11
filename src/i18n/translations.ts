@@ -37,7 +37,7 @@ export const T = {
   'nav.staff': { en: 'Staff Portal', it: 'Area Staff', es: 'Portal Personal', ar: 'بوابة الموظفين' },
 
   // Landing
-  'landing.tagline': { en: 'Premium Coffee Experience', it: 'Esperienza Caffè Premium', es: 'Experiencia de Café Premium', ar: 'تجربة قهوة فاخرة' },
+  'landing.tagline': { en: 'Coffee × Working Space', it: 'Coffee × Working Space', es: 'Coffee × Working Space', ar: 'Coffee × Working Space' },
   'landing.hero.title': { en: 'Where every cup tells a story', it: 'Dove ogni tazza racconta una storia', es: 'Donde cada taza cuenta una historia', ar: 'حيث كل فنجان يروي قصة' },
   'landing.hero.subtitle': {
     en: 'Experience the art of premium coffee, crafted with passion and precision.',

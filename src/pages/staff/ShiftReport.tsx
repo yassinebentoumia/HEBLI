@@ -129,7 +129,7 @@ export default function ShiftReport() {
   const handlePrint = () => window.print();
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0B1512] text-white">
       <style>{`
         @media print {
           body { background: #fff !important; color: #000 !important; }
@@ -149,7 +149,7 @@ export default function ShiftReport() {
         }
       `}</style>
 
-      <header className="no-print sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <header className="no-print sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4">
           <button
             onClick={() => navigate('/owner')}
@@ -179,7 +179,7 @@ export default function ShiftReport() {
       <main className="mx-auto max-w-5xl px-4 py-6 sm:py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="print-area rounded-3xl border border-white/[0.06] bg-[#0C0C0C] shadow-2xl"
+          className="print-area rounded-3xl border border-white/[0.06] bg-[#0E1A16] shadow-2xl"
         >
           {/* HEAD */}
           <div className="p-6 sm:p-10 border-b border-white/[0.06]">

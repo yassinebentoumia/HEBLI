@@ -136,7 +136,7 @@ export default function CreateInvoice() {
   const formattedTime = displayDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0B1512] text-white">
       {/* Print styles — only the invoice paper prints, no chrome */}
       <style>{`
         @media print {
@@ -162,7 +162,7 @@ export default function CreateInvoice() {
       `}</style>
 
       {/* Top bar — hidden when printing */}
-      <header className="no-print sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <header className="no-print sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-4">
           <button
             onClick={() => navigate(user?.role === 'Administrator' ? '/owner' : '/cashier')}
@@ -224,7 +224,7 @@ export default function CreateInvoice() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="print-area rounded-3xl border border-white/[0.06] bg-[#0C0C0C] shadow-2xl"
+          className="print-area rounded-3xl border border-white/[0.06] bg-[#0E1A16] shadow-2xl"
         >
           {/* HEAD */}
           <div className="p-6 sm:p-10 border-b border-white/[0.06]">
@@ -268,9 +268,9 @@ export default function CreateInvoice() {
                   onChange={(e) => handleSupplierChange(e.target.value)}
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white outline-none focus:border-[#D4AF37]/50"
                 >
-                  <option value="" className="bg-[#111]">— Select a supplier —</option>
+                  <option value="" className="bg-[#12211C]">— Select a supplier —</option>
                   {suppliers.map((s) => (
-                    <option key={s.id} value={s.id} className="bg-[#111]">
+                    <option key={s.id} value={s.id} className="bg-[#12211C]">
                       {s.name} ({s.products.length} products)
                     </option>
                   ))}
@@ -295,9 +295,9 @@ export default function CreateInvoice() {
                       onChange={(e) => setPickProductId(e.target.value)}
                       className="col-span-8 sm:col-span-8 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-sm text-white outline-none"
                     >
-                      <option value="" className="bg-[#111]">— Choose article —</option>
+                      <option value="" className="bg-[#12211C]">— Choose article —</option>
                       {productOptions.map((p) => (
-                        <option key={p.id} value={p.id} className="bg-[#111]">
+                        <option key={p.id} value={p.id} className="bg-[#12211C]">
                           {p.name}{p.unit ? ` / ${p.unit}` : ''} — {p.price.toFixed(2)} DT
                         </option>
                       ))}

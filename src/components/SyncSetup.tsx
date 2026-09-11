@@ -104,7 +104,7 @@ export default function SyncSetup() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-3xl border border-white/[0.08] bg-[#0C0C0C] p-6"
+              className="w-full max-w-md rounded-3xl border border-white/[0.08] bg-[#0E1A16] p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-2">

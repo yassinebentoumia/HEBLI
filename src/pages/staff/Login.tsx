@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, ArrowLeft, Coffee, Shield } from 'lucide-react';
+import { Lock, ArrowLeft, Coffee } from 'lucide-react';
+import { HebliMark } from '@/components/Logo';
 import { useNavigate } from 'react-router-dom';
 import GoldButton from '@/components/ui/GoldButton';
 import GlassCard from '@/components/ui/GlassCard';
@@ -49,7 +50,7 @@ export default function StaffLogin() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-4 relative">
+    <div className="flex min-h-screen items-center justify-center bg-[#0B1512] px-4 relative">
       {/* Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(212,175,55,0.06)_0%,_transparent_70%)]" />
@@ -85,12 +86,13 @@ export default function StaffLogin() {
             transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
             className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#D4AF37]/10"
           >
-            <Shield className="h-8 w-8 text-[#D4AF37]" />
+            <HebliMark className="h-9 w-9" />
           </motion.div>
 
           <h2 className="text-2xl font-bold tracking-tight">
-            <span className="text-[#D4AF37]">HEBLI</span> Staff
+            <span className="text-[#D4AF37] tracking-[0.15em]">HEBLI</span> Staff
           </h2>
+          <p className="mt-1 text-[10px] tracking-[0.3em] uppercase text-white/40">Coffee × Working Space</p>
           <p className="mt-2 text-sm text-white/40">Enter your secure PIN to access the dashboard.</p>
 
           {/* Sync status indicator */}

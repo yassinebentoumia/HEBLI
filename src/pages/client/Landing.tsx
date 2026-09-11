@@ -11,6 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getActiveProducts, getCategories } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
+import { HebliMark } from '@/components/Logo';
 import { useT } from '@/i18n/I18nProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import InstallAppButton from '@/components/InstallAppButton';
@@ -36,12 +37,13 @@ export default function Landing() {
     activeCategory === 'All' ? products : products.filter((p) => p.category === activeCategory);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0B1512] text-white">
       {/* Top Navigation Bar */}
-      <nav className="fixed top-0 z-50 w-full border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <nav className="fixed top-0 z-50 w-full border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-tight text-[#D4AF37]">HEBLI</span>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5">
+            <HebliMark className="h-7 w-7" />
+            <span className="text-xl font-bold tracking-[0.15em] text-[#D4AF37]">HEBLI</span>
           </button>
 
           {/* Desktop Nav */}
@@ -81,7 +83,7 @@ export default function Landing() {
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="sm:hidden border-t border-white/[0.06] bg-[#0A0A0A] px-4 py-4 space-y-3"
+            className="sm:hidden border-t border-white/[0.06] bg-[#0B1512] px-4 py-4 space-y-3"
           >
             <button onClick={() => { navigate('/client/menu'); setMobileMenuOpen(false); }} className="flex w-full items-center gap-3 text-start text-sm text-white/70 hover:text-white py-2.5 px-2 rounded-lg hover:bg-white/[0.03]">
               <BookOpen className="h-4 w-4 text-[#D4AF37]/70" />

@@ -17,7 +17,7 @@ export default function LoadingScreen() {
     <AnimatePresence>
       {visible && (
         <motion.div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0A0A0A]"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#0B1512]"
           exit={{ opacity: 0 }}
           transition={{ duration: 0.6, ease: 'easeInOut' }}
         >
@@ -41,7 +41,7 @@ export default function LoadingScreen() {
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6, duration: 0.8 }}
             >
-              Premium Coffee Experience
+              Coffee × Working Space
             </motion.p>
             <motion.div
               className="mt-8 flex justify-center gap-1.5"

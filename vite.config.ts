@@ -22,8 +22,8 @@ export default defineConfig({
         short_name: "HEBLI",
         description:
           "HEBLI – Ultra Luxury Smart Coffee Management Platform. Premium coffee experience, real-time orders, multi-device sync.",
-        theme_color: "#0A0A0A",
-        background_color: "#0A0A0A",
+        theme_color: "#0B1512",
+        background_color: "#0B1512",
         display: "standalone",
         orientation: "portrait",
         scope: "/",

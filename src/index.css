@@ -29,7 +29,12 @@
 
 html {
   scroll-behavior: smooth;
-  background: #0A0A0A;
+  /* HEBLI brand: deep forest-green background with a subtle gold/green glow */
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(212, 175, 55, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(20, 60, 45, 0.35), transparent 55%),
+    #0B1512;
+  background-attachment: fixed;
   color-scheme: dark;
 }
 

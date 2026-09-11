@@ -166,7 +166,7 @@ export default function Menu() {
 
   if (orderPlaced) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] px-4">
+      <div className="flex min-h-screen items-center justify-center bg-[#0B1512] px-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -208,14 +208,14 @@ export default function Menu() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white overflow-x-hidden">
+    <div className="min-h-screen bg-[#0B1512] text-white overflow-x-hidden">
       {/* Animated Background */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-b from-[#D4AF37]/5 to-transparent rounded-full blur-3xl" />
       </div>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center gap-4 px-4 py-4">
           <button
             onClick={() => navigate('/')}
@@ -474,7 +474,7 @@ export default function Menu() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl"
+              className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl"
             >
               <div className="flex flex-col h-full">
                 <div className="flex items-center justify-between p-6 border-b border-white/[0.04]">
@@ -500,7 +500,7 @@ export default function Menu() {
                         <motion.div
                           key={item.productId}
                           layout
-                          className="flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#111] p-3"
+                          className="flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#12211C] p-3"
                         >
                           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#D4AF37]/10">
                             <Coffee className="h-5 w-5 text-[#D4AF37]/70" strokeWidth={1.4} />

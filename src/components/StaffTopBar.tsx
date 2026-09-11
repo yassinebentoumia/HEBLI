@@ -200,9 +200,9 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
               <motion.div
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col"
               >
-                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0B1512] flex-shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15 flex-shrink-0">
                       <Bell className="h-5 w-5 text-[#D4AF37]" />
@@ -258,9 +258,9 @@ export default function StaffTopBar({ onLogout }: StaffTopBarProps) {
               <motion.div
                 initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0C0C0C] border-l border-white/[0.06] shadow-2xl flex flex-col"
+                className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[460px] bg-[#0E1A16] border-l border-white/[0.06] shadow-2xl flex flex-col"
               >
-                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0A0A0A] flex-shrink-0">
+                <div className="flex items-center justify-between p-5 border-b border-white/[0.06] bg-[#0B1512] flex-shrink-0">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37]/15 flex-shrink-0">
                       <MessageCircle className="h-5 w-5 text-[#D4AF37]" />
