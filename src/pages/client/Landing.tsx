@@ -11,7 +11,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getActiveProducts, getCategories } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
-import { HebliMark, HebliHeroLogo } from '@/components/Logo';
+import { HebliHeroLogo } from '@/components/Logo';
 import { useT } from '@/i18n/I18nProvider';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import InstallAppButton from '@/components/InstallAppButton';
@@ -41,9 +41,8 @@ export default function Landing() {
       {/* Top Navigation Bar */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5" aria-label="HEBLI">
-            <HebliMark className="h-9 w-9" />
-            <span className="text-xl font-bold tracking-[0.15em] text-[#D4AF37]">HEBLI</span>
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center" aria-label="HEBLI">
+            <span className="text-xl font-bold tracking-[0.25em] text-[#D4AF37]">HEBLI</span>
           </button>
 
           {/* Desktop Nav */}
@@ -153,46 +152,58 @@ export default function Landing() {
             </span>
           </motion.div>
 
-          {/* HEBLI logo (image) — replaces the text wordmark on the main page */}
-          <div className="relative">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85, y: 12 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="flex justify-center"
-            >
-              <HebliHeroLogo />
-            </motion.div>
-            {/* Underline */}
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 96, opacity: 1 }}
-              transition={{ delay: 0.9, duration: 1, ease: [0.16, 1, 0.3, 1] }}
-              className="mt-8 mx-auto h-px bg-gradient-to-r from-transparent via-[#D4AF37]/60 to-transparent"
-            />
-          </div>
-
-          {/* Brand tagline line (matches the logo) */}
+          {/* Advanced animated brand emblem */}
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 1.0, duration: 0.8 }}
-            className="mt-5 flex flex-col items-center gap-2"
+            initial={{ opacity: 0, scale: 0.85, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+            className="flex justify-center"
           >
-            <div className="text-[11px] sm:text-sm font-medium tracking-[0.4em] text-white/55 uppercase">
-              Coffee × Working Space
-            </div>
-            <div className="flex items-center gap-2 text-[9px] tracking-[0.4em] text-white/30 uppercase">
-              <span className="h-px w-6 bg-white/20" /> Est. 2025 <span className="h-px w-6 bg-white/20" />
-            </div>
+            <HebliHeroLogo />
           </motion.div>
+
+          {/* Wordmark — gold gradient, wide luxury tracking */}
+          <motion.h1
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            className="mt-8 text-5xl sm:text-7xl font-black tracking-[0.28em] pl-[0.28em] bg-gradient-to-b from-[#FFE8A3] via-[#D4AF37] to-[#8C6F1F] bg-clip-text text-transparent"
+          >
+            HEBLI
+          </motion.h1>
+
+          {/* Ornamental divider: line · diamond · line */}
+          <motion.div
+            initial={{ opacity: 0, scaleX: 0 }}
+            animate={{ opacity: 1, scaleX: 1 }}
+            transition={{ delay: 0.8, duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+            className="mx-auto mt-5 flex items-center justify-center gap-3"
+          >
+            <span className="h-px w-16 sm:w-24 bg-gradient-to-r from-transparent to-[#D4AF37]/60" />
+            <span className="h-1.5 w-1.5 rotate-45 bg-[#D4AF37]/80" />
+            <span className="text-[10px] sm:text-xs font-medium tracking-[0.45em] text-white/60 uppercase">
+              Coffee × Working Space
+            </span>
+            <span className="h-1.5 w-1.5 rotate-45 bg-[#D4AF37]/80" />
+            <span className="h-px w-16 sm:w-24 bg-gradient-to-l from-transparent to-[#D4AF37]/60" />
+          </motion.div>
+
+          {/* Hero headline */}
+          <motion.p
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.95, duration: 0.8 }}
+            className="mx-auto mt-7 max-w-xl text-lg sm:text-2xl font-light leading-snug text-white/80"
+          >
+            {t('landing.hero.title')}
+          </motion.p>
 
           {/* Sub-tagline */}
           <motion.p
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35, duration: 0.8 }}
-            className="mx-auto mt-8 max-w-md text-[15px] sm:text-base leading-relaxed text-white/45"
+            transition={{ delay: 1.05, duration: 0.8 }}
+            className="mx-auto mt-4 max-w-md text-[14px] sm:text-[15px] leading-relaxed text-white/45"
           >
             {t('landing.hero.subtitle')}
           </motion.p>
@@ -253,6 +264,70 @@ export default function Landing() {
           </div>
         </motion.div>
       </motion.section>
+
+      {/* ========================================================
+          SIGNATURE COLLECTION SHOWCASE — brand cups photo
+          ======================================================== */}
+      <section className="relative px-4 py-20 sm:py-28">
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#D4AF37]/20 to-transparent" />
+        <div className="mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="mb-10 text-center"
+          >
+            <div className="inline-flex items-center gap-2 text-[10px] font-semibold tracking-[0.3em] text-[#D4AF37]/80 uppercase">
+              <span className="h-px w-6 bg-[#D4AF37]/40" />
+              Signature Cups
+              <span className="h-px w-6 bg-[#D4AF37]/40" />
+            </div>
+            <h2 className="mt-4 text-3xl sm:text-5xl font-black tracking-tight">
+              Crafted in <span className="bg-gradient-to-r from-[#FFE8A3] to-[#D4AF37] bg-clip-text text-transparent">every detail</span>
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-white/45">
+              Classic Premium · Minimal Nature · Signature Luxury
+            </p>
+          </motion.div>
+
+          {/* Framed luxury image */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+            className="group relative mx-auto max-w-5xl"
+          >
+            {/* warm glow */}
+            <div className="pointer-events-none absolute -inset-6 -z-10 rounded-[2.5rem] bg-[#D4AF37]/10 blur-3xl" />
+            <div className="relative overflow-hidden rounded-[1.75rem] border border-[#D4AF37]/25 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
+              <img
+                src="/r.png"
+                alt="HEBLI signature cup collection"
+                className="w-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-[1.03]"
+                draggable={false}
+                loading="lazy"
+              />
+              {/* subtle top/bottom vignette to blend with the dark theme */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#0B1512]/40 via-transparent to-[#0B1512]/20" />
+              {/* animated gold sheen sweep */}
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute inset-0"
+                initial={{ x: '-120%' }}
+                whileInView={{ x: '120%' }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.6, duration: 1.6, ease: 'easeInOut' }}
+              >
+                <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-white/20 to-transparent" style={{ transform: 'skewX(-18deg)' }} />
+              </motion.div>
+              {/* inner gold hairline */}
+              <div className="pointer-events-none absolute inset-3 rounded-[1.25rem] border border-[#D4AF37]/15" />
+            </div>
+          </motion.div>
+        </div>
+      </section>
 
       {/* ========================================================
           FEATURED PRODUCTS — Cleaner, premium grid
