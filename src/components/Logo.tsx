@@ -1,49 +1,30 @@
 // ============================================================
-// HEBLI – Brand Logo (matches the real "H + leaf" monogram)
-// Olive-green → gold gradient. Left stroke of the H is a leaf.
+// HEBLI – Brand Logo
+// Renders your real logo file from /public/logo.png everywhere.
+// Just replace public/logo.png with your own image and it updates
+// across the whole app (headers, landing, login, loading, badge).
 // ============================================================
-
-let _gid = 0;
 
 interface MarkProps {
   className?: string; // sizing (h-/w-)
 }
 
-// The leaf-"H" monogram (used in headers, favicons, badges).
+// Path to your uploaded logo. Put your file at: public/logo.png
+export const LOGO_SRC = '/logo.png';
+
+// The brand mark (your logo image). Used in headers, badges, hero, etc.
 export function HebliMark({ className = 'h-8 w-8' }: MarkProps) {
-  // unique gradient id so multiple marks on one page don't clash
-  const id = `hebliGrad-${(_gid = (_gid + 1) % 100000)}`;
   return (
-    <svg viewBox="0 0 100 100" className={className} xmlns="http://www.w3.org/2000/svg" aria-label="HEBLI">
-      <defs>
-        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#E8D8A0" />
-          <stop offset="45%" stopColor="#C9B060" />
-          <stop offset="100%" stopColor="#5A6B3B" />
-        </linearGradient>
-      </defs>
-
-      {/* Right vertical stroke of the H (straight) */}
-      <rect x="66" y="14" width="12" height="72" rx="2" fill={`url(#${id})`} />
-
-      {/* Crossbar */}
-      <rect x="34" y="44" width="34" height="12" rx="2" fill={`url(#${id})`} />
-
-      {/* Left stroke rendered as a LEAF (curved, pointed top) */}
-      <path
-        d="M40 14
-           C 22 30, 22 66, 40 86
-           C 46 78, 46 22, 40 14 Z"
-        fill={`url(#${id})`}
-      />
-      {/* leaf vein */}
-      <path d="M40 20 C 33 40, 33 62, 40 80"
-        stroke="#0B1512" strokeWidth="2" strokeLinecap="round" fill="none" opacity="0.35" />
-    </svg>
+    <img
+      src={LOGO_SRC}
+      alt="HEBLI"
+      className={`${className} object-contain select-none`}
+      draggable={false}
+    />
   );
 }
 
-// Full stacked lockup: monogram on top, wordmark + tagline below (Landing hero).
+// Full lockup: logo + "HEBLI" wordmark + tagline.
 export function HebliLogo({
   className = '',
   size = 'md',

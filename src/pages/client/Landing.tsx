@@ -41,8 +41,9 @@ export default function Landing() {
       {/* Top Navigation Bar */}
       <nav className="fixed top-0 z-50 w-full border-b border-white/[0.06] bg-[#0B1512]/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center" aria-label="HEBLI">
+          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="flex items-center gap-2.5" aria-label="HEBLI">
             <HebliMark className="h-9 w-9" />
+            <span className="text-xl font-bold tracking-[0.15em] text-[#D4AF37]">HEBLI</span>
           </button>
 
           {/* Desktop Nav */}
