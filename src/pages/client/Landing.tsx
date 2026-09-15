@@ -9,7 +9,7 @@ import {
   Shield, Menu as MenuIcon, X, MessageCircle, BookOpen, Search as SearchIcon, Headphones,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getActiveProducts, getCategories } from '@/utils/store';
+import { getActiveProducts, getCategories, formatMoney } from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
 import { HebliHeroLogo } from '@/components/Logo';
 import { useT } from '@/i18n/I18nProvider';
@@ -450,7 +450,7 @@ export default function Landing() {
                     <p className="mt-1 text-xs text-white/40 line-clamp-2 leading-relaxed">{product.description}</p>
 
                     <div className="mt-4 flex items-center justify-between">
-                      <span className="text-xl font-black text-[#D4AF37] tracking-tight">{product.price.toFixed(2)} <span className="text-xs font-bold text-[#D4AF37]/70">DT</span></span>
+                      <span className="text-xl font-black text-[#D4AF37] tracking-tight">{formatMoney(product.price)}</span>
                       <div className="flex items-center gap-0.5 text-amber-400/90">
                         {[0, 1, 2, 3].map((i) => <Star key={i} className="h-3 w-3 fill-current" />)}
                         <Star className="h-3 w-3 fill-current opacity-25" />

@@ -43,6 +43,7 @@ const KEYS = {
   invoices: 'hebli_invoices',
   consumptions: 'hebli_consumptions',
   loyalty: 'hebli_loyalty',
+  settings: 'hebli_settings',
   backups: 'hebli_backups',
   currentUser: 'hebli_current_user',
 };
@@ -1115,4 +1116,51 @@ export function adjustLoyaltyPoints(id: string, delta: number): void {
 export function deleteLoyaltyMember(id: string): void {
   recordDeletion(KEYS.loyalty, id);
   saveLoyaltyMembers(getLoyaltyMembers().filter((m) => m.id !== id));
+}
+
+// ============================================================
+// App Settings (currency, etc.) — synced as a 1-item array.
+// ============================================================
+export interface AppSettings {
+  id: string;            // always 'app'
+  currency: string;      // e.g. 'DT', '€', '$', 'MAD', 'DZD'
+  currencyPosition: 'after' | 'before';
+  updatedAt: string;
+}
+
+export const CURRENCIES: { code: string; symbol: string; label: string; position: 'after' | 'before' }[] = [
+  { code: 'TND', symbol: 'DT',  label: 'Tunisian Dinar (DT)',   position: 'after'  },
+  { code: 'EUR', symbol: '€',   label: 'Euro (€)',               position: 'before' },
+  { code: 'USD', symbol: '$',   label: 'US Dollar ($)',          position: 'before' },
+  { code: 'MAD', symbol: 'DH',  label: 'Moroccan Dirham (DH)',   position: 'after'  },
+  { code: 'DZD', symbol: 'DA',  label: 'Algerian Dinar (DA)',    position: 'after'  },
+  { code: 'GBP', symbol: '£',   label: 'British Pound (£)',      position: 'before' },
+  { code: 'AED', symbol: 'AED', label: 'UAE Dirham (AED)',       position: 'after'  },
+  { code: 'SAR', symbol: 'SAR', label: 'Saudi Riyal (SAR)',      position: 'after'  },
+];
+
+const DEFAULT_SETTINGS: AppSettings = {
+  id: 'app', currency: 'DT', currencyPosition: 'after', updatedAt: '2026-01-01T00:00:00Z',
+};
+
+export function getSettings(): AppSettings {
+  const arr = safeRead<AppSettings[]>(KEYS.settings, [DEFAULT_SETTINGS]);
+  return arr[0] || DEFAULT_SETTINGS;
+}
+
+export function saveSettings(patch: Partial<AppSettings>): void {
+  const current = getSettings();
+  const next: AppSettings = { ...current, ...patch, id: 'app', updatedAt: new Date().toISOString() };
+  atomicWrite(KEYS.settings, [next]);
+}
+
+export function getCurrency(): string {
+  return getSettings().currency || 'DT';
+}
+
+// Format a money amount with the current currency (symbol before/after).
+export function formatMoney(n: number): string {
+  const s = getSettings();
+  const amount = (Number(n) || 0).toFixed(2);
+  return s.currencyPosition === 'before' ? `${s.currency}${amount}` : `${amount} ${s.currency}`;
 }

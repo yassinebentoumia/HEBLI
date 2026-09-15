@@ -27,8 +27,7 @@ import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
 import {
   getOrders, addOrder, updateOrderStatus, addPayment, addAuditLog, addNotification,
-  setOrderTable, TABLE_COUNT, getActiveProducts, awardLoyaltyForOrder,
-} from '@/utils/store';
+  setOrderTable, TABLE_COUNT, getActiveProducts, awardLoyaltyForOrder, formatMoney,} from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order, Product, CartItem } from '@/types';
 import { format } from 'date-fns';
@@ -122,7 +121,7 @@ export default function CashierDashboard() {
       addAuditLog({
         id: 'log-' + Date.now(),
         action: 'Payment Received',
-        details: `${order.total.toFixed(2)} DT payé pour la commande ${order.id}`,
+        details: `${formatMoney(order.total)} payé pour la commande ${order.id}`,
         user: user?.name || 'Unknown',
         timestamp: now.toISOString(),
       });
@@ -191,7 +190,7 @@ export default function CashierDashboard() {
     addAuditLog({
       id: 'log-' + Date.now(),
       action: 'Order Placed (Waiter)',
-      details: `Commande ${id} créée par le serveur pour la table ${newOrderTable} • ${cartTotal.toFixed(2)} DT`,
+      details: `Commande ${id} créée par le serveur pour la table ${newOrderTable} • ${formatMoney(cartTotal)}`,
       user: user?.name || 'Waiter',
       timestamp: now,
     });
@@ -200,7 +199,7 @@ export default function CashierDashboard() {
       id: 'ntf-' + Date.now() + '-b',
       target: 'Barista',
       title: 'New Order',
-      body: `${id} • Table ${newOrderTable} • ${cartTotal.toFixed(2)} DT`,
+      body: `${id} • Table ${newOrderTable} • ${formatMoney(cartTotal)}`,
       type: 'order',
       read: false,
       createdAt: now,
@@ -325,7 +324,7 @@ export default function CashierDashboard() {
                     </div>
                     <div className="text-right">
                       <div className="text-xs text-white/25">Total</div>
-                      <div className="text-xl font-bold text-[#D4AF37]">{order.total.toFixed(2)} DT</div>
+                      <div className="text-xl font-bold text-[#D4AF37]">{formatMoney(order.total)}</div>
                     </div>
                   </div>
                 </GlassCard>
@@ -373,7 +372,7 @@ export default function CashierDashboard() {
               >
                 <Armchair className={`h-6 w-6 ${paid ? 'text-[#D4AF37]' : 'text-emerald-400'}`} />
                 <span className={`mt-1 text-sm font-bold ${paid ? 'text-[#D4AF37]' : 'text-emerald-300'}`}>{num}</span>
-                <span className="mt-0.5 text-[9px] text-white/50">{occupant.total.toFixed(2)} DT</span>
+                <span className="mt-0.5 text-[9px] text-white/50">{formatMoney(occupant.total)}</span>
                 <span className={`mt-0.5 rounded-full px-1.5 text-[8px] font-bold uppercase tracking-wider ${
                   paid ? 'bg-[#D4AF37]/20 text-[#D4AF37]' : 'text-emerald-400/70'
                 }`}>
@@ -495,7 +494,7 @@ export default function CashierDashboard() {
                         )}
                       </div>
                       <span className="text-sm font-semibold leading-tight line-clamp-2">{p.name}</span>
-                      <span className="mt-1 text-xs text-[#D4AF37] font-bold">{p.price.toFixed(2)} DT</span>
+                      <span className="mt-1 text-xs text-[#D4AF37] font-bold">{formatMoney(p.price)}</span>
                       {inCart && (
                         <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-[#D4AF37] text-xs font-bold text-black shadow-lg">{inCart.quantity}</span>
                       )}
@@ -532,7 +531,7 @@ export default function CashierDashboard() {
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50" />
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-white/50">{cartCount} article{cartCount !== 1 ? 's' : ''}</div>
-                  <div className="text-lg font-bold text-[#D4AF37]">{cartTotal.toFixed(2)} DT</div>
+                  <div className="text-lg font-bold text-[#D4AF37]">{formatMoney(cartTotal)}</div>
                 </div>
                 <GoldButton onClick={submitNewOrder} disabled={cart.length === 0} className="w-full justify-center">
                   <ShoppingCart className="h-4 w-4" /> Envoyer la commande
@@ -570,7 +569,7 @@ export default function CashierDashboard() {
                   {detailOrder.items.map((item, i) => (
                     <div key={i} className="flex items-center justify-between text-sm">
                       <span className="text-white/70">{item.quantity}x {item.name}</span>
-                      <span className="text-white/50">{(item.price * item.quantity).toFixed(2)} DT</span>
+                      <span className="text-white/50">{formatMoney((item.price * item.quantity))}</span>
                     </div>
                   ))}
                 </div>
@@ -579,7 +578,7 @@ export default function CashierDashboard() {
                 )}
                 <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
                   <span className="text-sm font-semibold text-white/60">Total</span>
-                  <span className="text-2xl font-bold text-[#D4AF37]">{detailOrder.total.toFixed(2)} DT</span>
+                  <span className="text-2xl font-bold text-[#D4AF37]">{formatMoney(detailOrder.total)}</span>
                 </div>
               </div>
 

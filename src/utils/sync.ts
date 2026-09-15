@@ -29,6 +29,7 @@ const ARRAY_KEYS = [
   'hebli_invoices',
   'hebli_consumptions',
   'hebli_loyalty',
+  'hebli_settings',
 ];
 
 // Tombstone log — records ids that were deleted, so merging won't resurrect them.

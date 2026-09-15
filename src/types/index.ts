@@ -45,6 +45,13 @@ export interface Staff {
   createdAt: string;
 }
 
+// Optional paid add-on / extra for a product (e.g. "Extra shot", "Oat milk").
+export interface Supplement {
+  id: string;
+  name: string;
+  price: number;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -53,15 +60,17 @@ export interface Product {
   price: number;
   image: string;
   active: boolean;
+  supplements?: Supplement[];   // add-ons the guest can choose
   createdAt: string;
 }
 
 export interface CartItem {
   productId: string;
   name: string;
-  price: number;
+  price: number;                // unit price INCLUDING chosen supplements
   quantity: number;
   image: string;
+  supplements?: Supplement[];   // supplements chosen for this line
 }
 
 export interface Order {

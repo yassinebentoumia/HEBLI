@@ -10,7 +10,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, FileText, Printer } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
-import { getPayments, getOrders, getInvoices } from '@/utils/store';
+import { getPayments, getOrders, getInvoices, formatMoney} from '@/utils/store';
 
 type Shift = 'day' | 'night' | 'all';
 type Period = 'day' | 'week' | 'month';
@@ -239,9 +239,9 @@ export default function ShiftReport() {
                           <td className="px-4 py-2.5 text-white/40">{i + 1}</td>
                           <td className="px-4 py-2.5 font-medium">{r.name}</td>
                           <td className="px-4 py-2.5 text-right font-mono">{r.qty}</td>
-                          <td className="px-4 py-2.5 text-right text-white/60">{r.unitPrice.toFixed(2)} DT</td>
+                          <td className="px-4 py-2.5 text-right text-white/60">{formatMoney(r.unitPrice)}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-[#D4AF37] print-gold">
-                            {r.total.toFixed(2)} DT
+                            {formatMoney(r.total)}
                           </td>
                         </tr>
                       ))
@@ -255,7 +255,7 @@ export default function ShiftReport() {
                         </td>
                         <td colSpan={2}></td>
                         <td className="px-4 py-3 text-right font-bold text-[#D4AF37] print-gold text-base">
-                          {totalSales.toFixed(2)} DT
+                          {formatMoney(totalSales)}
                         </td>
                       </tr>
                     </tfoot>
@@ -292,7 +292,7 @@ export default function ShiftReport() {
                           <td className="px-4 py-2.5">{inv.supplierName}</td>
                           <td className="px-4 py-2.5 text-white/60">{inv.cashierName}</td>
                           <td className="px-4 py-2.5 text-right text-white/60">{inv.lines.length}</td>
-                          <td className="px-4 py-2.5 text-right font-bold">{inv.total.toFixed(2)} DT</td>
+                          <td className="px-4 py-2.5 text-right font-bold">{formatMoney(inv.total)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -302,7 +302,7 @@ export default function ShiftReport() {
                           Total consommation
                         </td>
                         <td className="px-4 py-3 text-right font-bold text-red-400 print-gold text-base">
-                          −{totalConsommation.toFixed(2)} DT
+                          −{formatMoney(totalConsommation)}
                         </td>
                       </tr>
                     </tfoot>
@@ -318,19 +318,19 @@ export default function ShiftReport() {
               <div>
                 <div className="text-[10px] uppercase tracking-[0.15em] text-white/40">Total Ventes</div>
                 <div className="text-2xl sm:text-3xl font-black text-[#D4AF37] print-gold tracking-tight mt-1">
-                  {totalSales.toFixed(2)} DT
+                  {formatMoney(totalSales)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.15em] text-white/40">Total Consommation</div>
                 <div className="text-2xl sm:text-3xl font-black text-red-400 print-gold tracking-tight mt-1">
-                  −{totalConsommation.toFixed(2)} DT
+                  −{formatMoney(totalConsommation)}
                 </div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.15em] text-white/40">Net</div>
                 <div className={`text-2xl sm:text-3xl font-black tracking-tight mt-1 ${net >= 0 ? 'text-green-400' : 'text-red-400'} print-gold`}>
-                  {net >= 0 ? '+' : ''}{net.toFixed(2)} DT
+                  {net >= 0 ? '+' : ''}{formatMoney(net)}
                 </div>
               </div>
             </div>

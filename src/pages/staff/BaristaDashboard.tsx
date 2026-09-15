@@ -27,7 +27,7 @@ import ChatPanel from '@/components/ChatPanel';
 import MySchedule from '@/components/MySchedule';
 import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
-import { getOrders, updateOrderStatus, addAuditLog, getPayments } from '@/utils/store';
+import { getOrders, updateOrderStatus, addAuditLog, getPayments, formatMoney} from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order } from '@/types';
 
@@ -342,7 +342,7 @@ export default function BaristaDashboard() {
                             <div className="text-xs text-amber-400/80 flex items-center gap-1 font-mono">
                               <Clock className="h-3 w-3" /> <LiveTimer startTime={order.createdAt} />
                             </div>
-                            <div className="text-sm font-bold text-[#D4AF37]">{order.total.toFixed(2)} DT</div>
+                            <div className="text-sm font-bold text-[#D4AF37]">{formatMoney(order.total)}</div>
                           </div>
                         </div>
                       </div>
@@ -407,7 +407,7 @@ export default function BaristaDashboard() {
                             <div className="text-xs text-blue-400/80 flex items-center gap-1 font-mono">
                               <Timer className="h-3 w-3" /> <LiveTimer startTime={order.createdAt} />
                             </div>
-                            <div className="text-sm font-bold text-[#D4AF37]">{order.total.toFixed(2)} DT</div>
+                            <div className="text-sm font-bold text-[#D4AF37]">{formatMoney(order.total)}</div>
                           </div>
                         </div>
                       </div>
@@ -474,7 +474,7 @@ export default function BaristaDashboard() {
                               ))}
                             </div>
                             <div className="mt-2 flex items-center justify-between">
-                              <span className="text-sm font-bold text-emerald-400">{order.total.toFixed(2)} DT</span>
+                              <span className="text-sm font-bold text-emerald-400">{formatMoney(order.total)}</span>
                               {paid && (
                                 <span className="text-[10px] text-green-400/50">✓ Prêt à donner</span>
                               )}
@@ -541,7 +541,7 @@ export default function BaristaDashboard() {
                             <div className="text-xs text-white/30">
                               {new Date(order.updatedAt || order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
-                            <div className="text-sm font-bold text-green-400">{order.total.toFixed(2)} DT</div>
+                            <div className="text-sm font-bold text-green-400">{formatMoney(order.total)}</div>
                           </div>
                         </div>
                       </div>

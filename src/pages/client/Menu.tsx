@@ -12,9 +12,9 @@ import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
 import { useApp } from '@/contexts/AppContext';
-import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT, upsertLoyaltyMember } from '@/utils/store';
+import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT, upsertLoyaltyMember, formatMoney} from '@/utils/store';
 import CategoryIcon from '@/components/CategoryIcon';
-import type { Product, CartItem, Category } from '@/types';
+import type { Product, CartItem, Category, Supplement } from '@/types';
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -40,6 +40,9 @@ export default function Menu() {
   const [orderId, setOrderId] = useState('');
   const [finalTotal, setFinalTotal] = useState(0);
   const [addedId, setAddedId] = useState<string | null>(null);
+  // Supplement chooser
+  const [suppProduct, setSuppProduct] = useState<Product | null>(null);
+  const [chosenSupps, setChosenSupps] = useState<Supplement[]>([]);
 
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
@@ -73,34 +76,48 @@ export default function Menu() {
     return catMatch && searchMatch;
   });
 
-  const addToCart = (product: Product) => {
+  // A stable signature so identical product + supplement combos stack together.
+  const lineKey = (i: { productId: string; supplements?: { id: string }[] }) =>
+    i.productId + '|' + (i.supplements || []).map((s) => s.id).sort().join(',');
+
+  // Click a product: if it has supplements, open the chooser; else add directly.
+  const onProductClick = (product: Product) => {
+    if (product.supplements && product.supplements.length > 0) {
+      setSuppProduct(product);
+      setChosenSupps([]);
+    } else {
+      addToCart(product);
+    }
+  };
+
+  const addToCart = (product: Product, supplements: { id: string; name: string; price: number }[] = []) => {
     setAddedId(product.id);
     setTimeout(() => setAddedId(null), 600);
+    const unitPrice = product.price + supplements.reduce((s, x) => s + x.price, 0);
+    const newLine: CartItem = {
+      productId: product.id, name: product.name, price: unitPrice, quantity: 1,
+      image: product.image, supplements: supplements.length ? supplements : undefined,
+    };
+    const key = lineKey(newLine);
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === product.id);
-      if (existing) {
-        return prev.map((i) =>
-          i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [...prev, { productId: product.id, name: product.name, price: product.price, quantity: 1, image: product.image }];
+      const existing = prev.find((i) => lineKey(i) === key);
+      if (existing) return prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i));
+      return [...prev, newLine];
     });
   };
 
-  const removeFromCart = (productId: string) => {
+  const removeFromCart = (key: string) => {
     setCart((prev) => {
-      const existing = prev.find((i) => i.productId === productId);
+      const existing = prev.find((i) => lineKey(i) === key);
       if (existing && existing.quantity > 1) {
-        return prev.map((i) =>
-          i.productId === productId ? { ...i, quantity: i.quantity - 1 } : i
-        );
+        return prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity - 1 } : i));
       }
-      return prev.filter((i) => i.productId !== productId);
+      return prev.filter((i) => lineKey(i) !== key);
     });
   };
 
-  const deleteFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((i) => i.productId !== productId));
+  const deleteFromCart = (key: string) => {
+    setCart((prev) => prev.filter((i) => lineKey(i) !== key));
   };
 
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -129,7 +146,7 @@ export default function Menu() {
     addAuditLog({
       id: 'log-' + Date.now(),
       action: 'Order Placed',
-      details: `Order ${id} for ${order.clientName} • ${total.toFixed(2)} DT`,
+      details: `Order ${id} for ${order.clientName} • ${formatMoney(total)}`,
       user: order.clientName,
       timestamp: new Date().toISOString(),
     });
@@ -138,7 +155,7 @@ export default function Menu() {
       id: 'ntf-' + Date.now() + '-b',
       target: 'Barista',
       title: 'New Order',
-      body: `${id} • ${order.clientName} • ${total.toFixed(2)} DT`,
+      body: `${id} • ${order.clientName} • ${formatMoney(total)}`,
       type: 'order',
       read: false,
       createdAt: new Date().toISOString(),
@@ -147,7 +164,7 @@ export default function Menu() {
       id: 'ntf-' + Date.now() + '-c',
       target: 'Cashier',
       title: 'New Order',
-      body: `${id} • ${order.clientName} • ${total.toFixed(2)} DT`,
+      body: `${id} • ${order.clientName} • ${formatMoney(total)}`,
       type: 'order',
       read: false,
       createdAt: new Date().toISOString(),
@@ -186,7 +203,7 @@ export default function Menu() {
             <div className="text-sm text-white/40">{t('order.orderId')}</div>
             <div className="mt-1 text-2xl font-bold text-[#D4AF37] tracking-wider">{orderId}</div>
             <div className="mt-4 text-sm text-white/40">{t('common.total')}</div>
-            <div className="text-xl font-bold text-white">{finalTotal.toFixed(2)} DT</div>
+            <div className="text-xl font-bold text-white">{formatMoney(finalTotal)}</div>
           </GlassCard>
           <div className="mt-8 flex gap-4 justify-center">
             <button
@@ -326,7 +343,7 @@ export default function Menu() {
               >
                 <GlassCard
                   className="h-full flex flex-col group cursor-pointer relative overflow-hidden"
-                  onClick={() => addToCart(product)}
+                  onClick={() => onProductClick(product)}
                 >
                   {/* Glow effect on hover */}
                   <div className="absolute inset-0 bg-gradient-to-br from-[#D4AF37]/0 to-[#D4AF37]/0 group-hover:from-[#D4AF37]/5 group-hover:to-amber-600/5 transition-all duration-500" />
@@ -375,7 +392,7 @@ export default function Menu() {
                     </p>
 
                     <div className="mt-4 flex items-center justify-between">
-                      <span className="text-xl font-bold text-white">{product.price.toFixed(2)} DT</span>
+                      <span className="text-xl font-bold text-white">{formatMoney(product.price)}</span>
                       <motion.button
                         whileTap={{ scale: 0.9 }}
                         className={`rounded-full p-2 transition-colors ${
@@ -445,7 +462,7 @@ export default function Menu() {
                   <div className="flex items-center gap-2">
                     <div className="text-right leading-tight">
                       <div className="text-[10px] font-bold uppercase tracking-wider opacity-70">{t('common.total')}</div>
-                      <div className="text-base font-black tracking-tight">{total.toFixed(2)} DT</div>
+                      <div className="text-base font-black tracking-tight">{formatMoney(total)}</div>
                     </div>
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-black/15 group-hover:translate-x-0.5 transition-transform">
                       <ChevronRight className="h-5 w-5" />
@@ -496,9 +513,11 @@ export default function Menu() {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {cart.map(item => (
+                      {cart.map(item => {
+                        const key = lineKey(item);
+                        return (
                         <motion.div
-                          key={item.productId}
+                          key={key}
                           layout
                           className="flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#12211C] p-3"
                         >
@@ -507,22 +526,30 @@ export default function Menu() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{item.name}</div>
-                            <div className="text-xs text-white/30">{item.price.toFixed(2)} DT {t('cart.eachPrice')}</div>
+                            {item.supplements && item.supplements.length > 0 && (
+                              <div className="text-[11px] text-[#D4AF37]/80 truncate">
+                                + {item.supplements.map((s) => s.name).join(', ')}
+                              </div>
+                            )}
+                            <div className="text-xs text-white/30">{formatMoney(item.price)} {t('cart.eachPrice')}</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <button onClick={() => removeFromCart(item.productId)} className="rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/[0.04]">
+                            <button onClick={() => removeFromCart(key)} className="rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/[0.04]">
                               <Minus className="h-3.5 w-3.5" />
                             </button>
                             <span className="text-sm font-semibold w-5 text-center">{item.quantity}</span>
-                            <button onClick={() => addToCart({ id: item.productId, name: item.name, price: item.price } as Product)} className="rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/[0.04]">
+                            <button
+                              onClick={() => setCart((prev) => prev.map((i) => (lineKey(i) === key ? { ...i, quantity: i.quantity + 1 } : i)))}
+                              className="rounded-lg p-1 text-white/30 hover:text-white hover:bg-white/[0.04]"
+                            >
                               <Plus className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => deleteFromCart(item.productId)} className="ml-1 rounded-lg p-1 text-white/20 hover:text-red-400">
+                            <button onClick={() => deleteFromCart(key)} className="ml-1 rounded-lg p-1 text-white/20 hover:text-red-400">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </motion.div>
-                      ))}
+                      );})}
                     </div>
                   )}
                 </div>
@@ -531,7 +558,7 @@ export default function Menu() {
                   <div className="p-6 border-t border-white/[0.04] space-y-4">
                     <div className="flex justify-between items-center">
                       <span className="text-white/40">{t('common.total')}</span>
-                      <span className="text-2xl font-bold">{total.toFixed(2)} DT</span>
+                      <span className="text-2xl font-bold">{formatMoney(total)}</span>
                     </div>
                     <div className="space-y-3">
                       <div>
@@ -590,10 +617,66 @@ export default function Menu() {
                       disabled={!selectedTable}
                       className="w-full rounded-2xl bg-[#D4AF37] py-4 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
                     >
-                      {t('cart.placeOrder')} • {total.toFixed(2)} DT
+                      {t('cart.placeOrder')} • {formatMoney(total)}
                     </button>
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================
+          SUPPLEMENT CHOOSER (guest add-ons)
+         ============================================================ */}
+      <AnimatePresence>
+        {suppProduct && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-sm" onClick={() => setSuppProduct(null)} />
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 240 }}
+              className="fixed inset-x-0 bottom-0 z-[9999] max-h-[85vh] rounded-t-3xl bg-[#0E1A16] border-t border-white/[0.08] shadow-2xl flex flex-col">
+              <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+                <div className="min-w-0">
+                  <h2 className="text-lg font-bold truncate">{suppProduct.name}</h2>
+                  <p className="text-xs text-white/40">Ajouter des suppléments (optionnel)</p>
+                </div>
+                <button onClick={() => setSuppProduct(null)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]"><X className="h-5 w-5" /></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                {(suppProduct.supplements || []).map((s) => {
+                  const active = chosenSupps.some((c) => c.id === s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setChosenSupps((prev) => active ? prev.filter((c) => c.id !== s.id) : [...prev, s])}
+                      className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition-all active:scale-[0.99] ${
+                        active ? 'border-[#D4AF37] bg-[#D4AF37]/[0.12]' : 'border-white/[0.08] bg-white/[0.02] hover:border-[#D4AF37]/40'
+                      }`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-md border ${active ? 'border-[#D4AF37] bg-[#D4AF37] text-black' : 'border-white/20'}`}>
+                          {active && <Check className="h-3.5 w-3.5" />}
+                        </span>
+                        <span className="text-sm font-medium text-white/85">{s.name}</span>
+                      </span>
+                      <span className="text-sm font-semibold text-[#D4AF37]">+ {formatMoney(s.price)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-white/[0.06] p-4">
+                <button
+                  onClick={() => { addToCart(suppProduct, chosenSupps); setSuppProduct(null); }}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#D4AF37] py-3.5 text-sm font-bold text-black hover:bg-amber-400 active:scale-[0.98] transition-all"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Ajouter · {formatMoney(suppProduct.price + chosenSupps.reduce((a, s) => a + s.price, 0))}
+                </button>
               </div>
             </motion.div>
           </>

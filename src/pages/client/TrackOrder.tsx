@@ -10,7 +10,7 @@ import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
 import type { TranslationKey } from '@/i18n/translations';
-import { getOrders } from '@/utils/store';
+import { getOrders, formatMoney} from '@/utils/store';
 import type { Order, OrderStatus } from '@/types';
 
 const statusSteps: { status: OrderStatus; icon: typeof Clock; labelKey: TranslationKey; descKey: TranslationKey }[] = [
@@ -181,7 +181,7 @@ export default function TrackOrder() {
                           </motion.div>
                         )}
                       </div>
-                      <span className="text-sm font-semibold text-white/60">{o.total.toFixed(2)} DT</span>
+                      <span className="text-sm font-semibold text-white/60">{formatMoney(o.total)}</span>
                     </GlassCard>
                   </motion.button>
                 ))}
@@ -223,7 +223,7 @@ export default function TrackOrder() {
                 </div>
                 <div>
                   <div className="text-xs text-white/30">Total</div>
-                  <div className="mt-1 text-sm font-bold text-[#D4AF37]">{selectedOrder.total.toFixed(2)} DT</div>
+                  <div className="mt-1 text-sm font-bold text-[#D4AF37]">{formatMoney(selectedOrder.total)}</div>
                 </div>
               </div>
               <div className="mt-4 border-t border-white/[0.06] pt-4">
@@ -231,7 +231,7 @@ export default function TrackOrder() {
                 {selectedOrder.items.map((item, i) => (
                   <div key={i} className="flex justify-between text-sm py-1">
                     <span className="text-white/70">{item.quantity}x {item.name}</span>
-                    <span className="text-white/50">{(item.price * item.quantity).toFixed(2)} DT</span>
+                    <span className="text-white/50">{formatMoney((item.price * item.quantity))}</span>
                   </div>
                 ))}
               </div>
@@ -261,7 +261,7 @@ export default function TrackOrder() {
                     <div className="text-base font-bold text-[#D4AF37]">Your order is ready! 🎉</div>
                     <div className="mt-0.5 text-sm text-white/70">
                       Please go to the <span className="font-semibold text-white">waiter</span> to pay{' '}
-                      <span className="font-semibold text-[#D4AF37]">{selectedOrder.total.toFixed(2)} DT</span> and collect your order.
+                      <span className="font-semibold text-[#D4AF37]">{formatMoney(selectedOrder.total)}</span> and collect your order.
                     </div>
                   </div>
                 </div>

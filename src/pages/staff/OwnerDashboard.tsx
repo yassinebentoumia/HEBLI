@@ -97,7 +97,7 @@ import {
   getStaffSchedule,
   setStaffSchedule,
   scheduleWeeklyMinutes,
-  WEEK_DAYS,
+  WEEK_DAYS, formatMoney, getCurrency, getSettings, saveSettings, CURRENCIES,
 } from '@/utils/store';
 import StaffTopBar from '@/components/StaffTopBar';
 import { HebliMark } from '@/components/Logo';
@@ -122,6 +122,7 @@ import type {
   Invoice,
   Consumption,
   StaffRole,
+  Supplement,
   WeekSchedule,
   WeekDayKey,
   DaySchedule,
@@ -276,7 +277,7 @@ function OverviewTab() {
               </div>
               <div>
                 <div className="text-xs text-white/40 tracking-wider uppercase">Revenue</div>
-                <div className="text-2xl font-bold">{analytics.totalRevenue.toFixed(2)} DT</div>
+                <div className="text-2xl font-bold">{formatMoney(analytics.totalRevenue)}</div>
               </div>
             </div>
           </GlassCard>
@@ -304,7 +305,7 @@ function OverviewTab() {
               </div>
               <div>
                 <div className="text-xs text-white/40 tracking-wider uppercase">Avg Order</div>
-                <div className="text-2xl font-bold">{analytics.averageOrderValue.toFixed(2)} DT</div>
+                <div className="text-2xl font-bold">{formatMoney(analytics.averageOrderValue)}</div>
               </div>
             </div>
           </GlassCard>
@@ -339,10 +340,10 @@ function OverviewTab() {
               </defs>
               <CartesianGrid stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} DT`} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} ${getCurrency()}`} />
               <Tooltip
                 contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
-                formatter={(value: any) => [`${Number(value).toFixed(2)} DT`, 'Revenue']}
+                formatter={(value: any) => [`${formatMoney(Number(value))}`, 'Revenue']}
               />
               <Area type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} fill="url(#revGrad)" />
             </AreaChart>
@@ -365,7 +366,7 @@ function OverviewTab() {
                     <div className="text-sm font-medium">{p.name}</div>
                     <div className="text-xs text-white/30">{p.count} sold</div>
                   </div>
-                  <span className="text-sm font-semibold text-[#D4AF37]">{p.revenue.toFixed(2)} DT</span>
+                  <span className="text-sm font-semibold text-[#D4AF37]">{formatMoney(p.revenue)}</span>
                 </div>
               ))}
             </div>
@@ -385,7 +386,7 @@ function OverviewTab() {
                     <div className="text-xs text-white/40">{o.clientName} • {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold">{o.total.toFixed(2)} DT</span>
+                    <span className="text-sm font-semibold">{formatMoney(o.total)}</span>
                     <StatusBadge status={o.status} />
                   </div>
                 </div>
@@ -445,6 +446,8 @@ function ProductsTab() {
     price: '',
     image: '',
   });
+  const [supps, setSupps] = useState<Supplement[]>([]);
+  const [suppDraft, setSuppDraft] = useState({ name: '', price: '' });
 
   useEffect(() => { setProducts(getProducts()); }, []);
 
@@ -457,14 +460,24 @@ function ProductsTab() {
   const openNew = () => {
     setEditProduct(null);
     setForm({ name: '', category: 'Espresso', description: '', price: '', image: '' });
+    setSupps([]); setSuppDraft({ name: '', price: '' });
     setShowForm(true);
   };
 
   const openEdit = (p: Product) => {
     setEditProduct(p);
     setForm({ name: p.name, category: p.category, description: p.description, price: String(p.price), image: p.image || '' });
+    setSupps(p.supplements || []); setSuppDraft({ name: '', price: '' });
     setShowForm(true);
   };
+
+  const addSupp = () => {
+    const price = parseFloat(suppDraft.price);
+    if (!suppDraft.name.trim() || isNaN(price) || price < 0) return;
+    setSupps((prev) => [...prev, { id: 'sup-' + Date.now(), name: suppDraft.name.trim(), price }]);
+    setSuppDraft({ name: '', price: '' });
+  };
+  const removeSupp = (id: string) => setSupps((prev) => prev.filter((x) => x.id !== id));
 
   const handleSave = () => {
     if (!form.name || !form.price) return;
@@ -475,6 +488,7 @@ function ProductsTab() {
         description: form.description,
         price: parseFloat(form.price),
         image: form.image,
+        supplements: supps,
       });
       addLog('Product Updated', `Product "${form.name}" was updated`);
     } else {
@@ -486,6 +500,7 @@ function ProductsTab() {
         price: parseFloat(form.price),
         image: form.image,
         active: true,
+        supplements: supps,
         createdAt: new Date().toISOString(),
       });
       addLog('Product Created', `Product "${form.name}" was created`);
@@ -556,7 +571,7 @@ function ProductsTab() {
               <h3 className="font-semibold">{p.name}</h3>
               <p className="mt-1 text-xs text-white/40 line-clamp-2">{p.description}</p>
               <div className="mt-3 flex items-center justify-between">
-                <span className="text-lg font-bold text-[#D4AF37]">{p.price.toFixed(2)} DT</span>
+                <span className="text-lg font-bold text-[#D4AF37]">{formatMoney(p.price)}</span>
                 <button
                   onClick={() => toggleActive(p.id, p.name, p.active)}
                   className={`text-xs rounded-lg px-3 py-1 transition-colors ${p.active ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20' : 'bg-green-500/10 text-green-400 hover:bg-green-500/20'}`}
@@ -617,6 +632,35 @@ function ProductsTab() {
                   onChange={(e) => setForm({ ...form, image: e.target.value })}
                   className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none"
                 />
+
+                {/* Supplements / add-ons */}
+                <div className="rounded-xl border border-[#D4AF37]/15 bg-[#D4AF37]/[0.04] p-3">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#D4AF37]/80">
+                    Suppléments (options payantes)
+                  </div>
+                  {supps.length > 0 && (
+                    <div className="mb-2 space-y-1.5">
+                      {supps.map((sp) => (
+                        <div key={sp.id} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-1.5 text-sm">
+                          <span className="text-white/80">{sp.name}</span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-[#D4AF37] font-semibold">+ {formatMoney(sp.price)}</span>
+                            <button onClick={() => removeSupp(sp.id)} className="text-white/30 hover:text-red-400"><Trash2 className="h-3.5 w-3.5" /></button>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input type="text" placeholder="Nom (ex: Extra shot)" value={suppDraft.name}
+                      onChange={(e) => setSuppDraft({ ...suppDraft, name: e.target.value })}
+                      className="flex-1 rounded-lg border border-white/[0.08] bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/40" />
+                    <input type="number" step="0.01" min="0" placeholder="Prix" value={suppDraft.price}
+                      onChange={(e) => setSuppDraft({ ...suppDraft, price: e.target.value })}
+                      className="w-20 rounded-lg border border-white/[0.08] bg-black/30 px-2.5 py-1.5 text-xs text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/40" />
+                    <button onClick={addSupp} className="rounded-lg bg-[#D4AF37] px-3 py-1.5 text-[11px] font-bold text-black hover:bg-amber-400">+ Ajouter</button>
+                  </div>
+                </div>
               </div>
               <div className="mt-6 flex gap-3">
                 <GoldButton variant="outline" className="flex-1" onClick={() => setShowForm(false)}>Cancel</GoldButton>
@@ -999,11 +1043,11 @@ function StaffTab() {
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       <div>
                         <div className="text-[9px] uppercase tracking-wider text-white/30">Pay today</div>
-                        <div className="font-mono text-sm font-bold text-green-400">{todayPay.toFixed(2)} DT</div>
+                        <div className="font-mono text-sm font-bold text-green-400">{formatMoney(todayPay)}</div>
                       </div>
                       <div>
                         <div className="text-[9px] uppercase tracking-wider text-white/30">Pay this month</div>
-                        <div className="font-mono text-sm font-bold text-green-400">{monthPay.toFixed(2)} DT</div>
+                        <div className="font-mono text-sm font-bold text-green-400">{formatMoney(monthPay)}</div>
                       </div>
                     </div>
                   )}
@@ -1480,7 +1524,7 @@ function InventoryTab() {
         </GlassCard>
         <GlassCard hover={false}>
           <div className="text-xs text-white/40 uppercase tracking-wider">Total Spent on Stock</div>
-          <div className="mt-1 text-2xl font-bold text-amber-400">{totalSpent.toFixed(2)} DT</div>
+          <div className="mt-1 text-2xl font-bold text-amber-400">{formatMoney(totalSpent)}</div>
         </GlassCard>
       </div>
 
@@ -1521,7 +1565,7 @@ function InventoryTab() {
                     <span className="text-[10px] tracking-wider text-[#D4AF37] uppercase">
                       {g.variants.length} variant{g.variants.length !== 1 ? 's' : ''}
                     </span>
-                    <span className="text-[10px] text-white/30">{g.totalSpent.toFixed(2)} DT</span>
+                    <span className="text-[10px] text-white/30">{formatMoney(g.totalSpent)}</span>
                   </div>
                   <h3 className="text-lg font-bold capitalize">{g.displayName}</h3>
                   <div className="mt-2 text-3xl font-black text-white">
@@ -1615,7 +1659,7 @@ function InventoryTab() {
                     <p className="text-xs text-white/40 mt-0.5">
                       <span className="font-mono text-[#D4AF37]">{openGroup.totalQty.toLocaleString(undefined, { maximumFractionDigits: 2 })} {openGroup.baseUnit}</span> total ·
                       {' '}{openGroup.variants.length} variant{openGroup.variants.length !== 1 ? 's' : ''} ·
-                      {' '}{openGroup.totalSpent.toFixed(2)} DT spent
+                      {' '}{formatMoney(openGroup.totalSpent)} spent
                     </p>
                   </div>
                   <button onClick={() => setOpenGroup(null)} className="rounded-xl p-2 text-white/50 hover:text-white hover:bg-white/[0.05]">
@@ -1636,7 +1680,7 @@ function InventoryTab() {
                             <div className="font-semibold capitalize">{v.name}</div>
                             <div className="text-[11px] text-white/40 mt-0.5">
                               {v.lines.length} purchase{v.lines.length !== 1 ? 's' : ''} ·
-                              {' '}avg {v.avgPrice.toFixed(2)} DT{v.unit ? `/${v.unit}` : ''}
+                              {' '}avg {formatMoney(v.avgPrice)}{v.unit ? `/${v.unit}` : ''}
                             </div>
                           </div>
                           <div className="text-right">
@@ -1737,8 +1781,8 @@ function InventoryTab() {
                             {l.qty.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             <span className="text-[10px] text-white/40 ml-1">{openVariant.unit}</span>
                           </div>
-                          <div className="text-[10px] text-white/40">@ {l.unitPrice.toFixed(2)} DT</div>
-                          <div className="text-[11px] font-semibold text-[#D4AF37]">{(l.qty * l.unitPrice).toFixed(2)} DT</div>
+                          <div className="text-[10px] text-white/40">@ {formatMoney(l.unitPrice)}</div>
+                          <div className="text-[11px] font-semibold text-[#D4AF37]">{formatMoney((l.qty * l.unitPrice))}</div>
                         </div>
                       </div>
                     </div>
@@ -1854,9 +1898,9 @@ function AnalyticsTab() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: 'Revenue', value: `${analytics.totalRevenue.toFixed(2)} DT`, color: 'text-green-400', icon: DollarSign },
+          { label: 'Revenue', value: `${formatMoney(analytics.totalRevenue)}`, color: 'text-green-400', icon: DollarSign },
           { label: 'Orders', value: analytics.totalOrders, color: 'text-blue-400', icon: ShoppingBag },
-          { label: 'Avg Order', value: `${analytics.averageOrderValue.toFixed(2)} DT`, color: 'text-amber-400', icon: Activity },
+          { label: 'Avg Order', value: `${formatMoney(analytics.averageOrderValue)}`, color: 'text-amber-400', icon: Activity },
           { label: 'Best Seller', value: analytics.bestSellingProducts[0]?.name || '-', color: 'text-[#D4AF37]', icon: Zap },
         ].map((stat, i) => (
           <GlassCard key={i} hover={false}>
@@ -1887,7 +1931,7 @@ function AnalyticsTab() {
               </defs>
               <CartesianGrid stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="month" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} />
-              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} tickFormatter={(v) => `${v} DT`} />
+              <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 11 }} tickFormatter={(v) => `${v} ${getCurrency()}`} />
               <Tooltip contentStyle={{ background: '#12211C', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }} />
               <Area type="monotone" dataKey="revenue" stroke="#D4AF37" strokeWidth={2} fill="url(#revGrad2)" />
             </AreaChart>
@@ -1928,7 +1972,7 @@ function AnalyticsTab() {
                     <div className="text-sm font-medium">{p.name}</div>
                     <div className="text-xs text-white/30">{p.count} sold</div>
                   </div>
-                  <span className="text-sm font-semibold text-[#D4AF37]">{p.revenue.toFixed(2)} DT</span>
+                  <span className="text-sm font-semibold text-[#D4AF37]">{formatMoney(p.revenue)}</span>
                 </div>
               ))}
             </div>
@@ -2530,11 +2574,11 @@ function OrdersTab() {
       <div className="grid sm:grid-cols-3 gap-3">
         <GlassCard hover={false}>
           <div className="text-xs text-white/40 uppercase tracking-wider">Today's revenue</div>
-          <div className="mt-1 text-2xl font-bold text-green-400">{totalToday.toFixed(2)} DT</div>
+          <div className="mt-1 text-2xl font-bold text-green-400">{formatMoney(totalToday)}</div>
         </GlassCard>
         <GlassCard hover={false}>
           <div className="text-xs text-white/40 uppercase tracking-wider">Total revenue (all-time)</div>
-          <div className="mt-1 text-2xl font-bold text-[#D4AF37]">{totalAll.toFixed(2)} DT</div>
+          <div className="mt-1 text-2xl font-bold text-[#D4AF37]">{formatMoney(totalAll)}</div>
         </GlassCard>
         <GlassCard hover={false}>
           <div className="text-xs text-white/40 uppercase tracking-wider">Orders</div>
@@ -2630,7 +2674,7 @@ function OrdersTab() {
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
-                    <span className="text-base font-bold text-[#D4AF37]">{o.total.toFixed(2)} DT</span>
+                    <span className="text-base font-bold text-[#D4AF37]">{formatMoney(o.total)}</span>
                     <button
                       onClick={() => setConfirmDelete({ type: 'order', id: o.id })}
                       className="rounded-lg border border-red-500/20 bg-red-500/5 p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
@@ -2818,12 +2862,12 @@ function InvoicesTab() {
           <div className="text-xs text-white/40 uppercase tracking-wider">Invoices this month</div>
           <div className="mt-1 text-2xl font-bold text-blue-400">
             {invoices.filter((i) => i.date.startsWith(monthKey)).length}
-            <span className="text-sm font-normal text-white/40 ml-2">({monthSpent.toFixed(2)} DT)</span>
+            <span className="text-sm font-normal text-white/40 ml-2">({formatMoney(monthSpent)})</span>
           </div>
         </GlassCard>
         <GlassCard hover={false}>
           <div className="text-xs text-white/40 uppercase tracking-wider">Total spent (all-time)</div>
-          <div className="mt-1 text-2xl font-bold text-amber-400">{totalSpent.toFixed(2)} DT</div>
+          <div className="mt-1 text-2xl font-bold text-amber-400">{formatMoney(totalSpent)}</div>
         </GlassCard>
       </div>
 
@@ -2880,7 +2924,7 @@ function InvoicesTab() {
                       {s.products.map((p) => (
                         <div key={p.id} className="flex items-center justify-between text-xs">
                           <span className="text-white/60 truncate">{p.name}{p.unit ? ` / ${p.unit}` : ''}</span>
-                          <span className="font-semibold text-[#D4AF37]">{p.price.toFixed(2)} DT</span>
+                          <span className="font-semibold text-[#D4AF37]">{formatMoney(p.price)}</span>
                         </div>
                       ))}
                     </div>
@@ -2931,7 +2975,7 @@ function InvoicesTab() {
                     </div>
                   </div>
                   <div className="text-right flex flex-col items-end gap-1.5">
-                    <div className="text-base font-bold text-[#D4AF37]">{inv.total.toFixed(2)} DT</div>
+                    <div className="text-base font-bold text-[#D4AF37]">{formatMoney(inv.total)}</div>
                     <div className="text-[10px] text-white/30">{inv.lines.length} line{inv.lines.length !== 1 ? 's' : ''}</div>
                     <button
                       onClick={() => navigate(`/cashier/invoice?id=${inv.id}`)}
@@ -3030,7 +3074,7 @@ function InvoicesTab() {
                         {sForm.products.map((p) => (
                           <div key={p.id} className="flex items-center gap-2 rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
                             <span className="flex-1 text-sm truncate">{p.name}{p.unit ? ` / ${p.unit}` : ''}</span>
-                            <span className="text-sm font-semibold text-[#D4AF37]">{p.price.toFixed(2)} DT</span>
+                            <span className="text-sm font-semibold text-[#D4AF37]">{formatMoney(p.price)}</span>
                             <button onClick={() => removeProductLine(p.id)} className="rounded p-1 text-white/30 hover:text-red-400">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -3200,6 +3244,15 @@ function SettingsTab() {
   const [info, setInfo] = useState<WifiLockInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currency, setCurrency] = useState(() => getSettings().currency);
+
+  const applyCurrency = (code: string) => {
+    const c = CURRENCIES.find((x) => x.code === code);
+    if (!c) return;
+    saveSettings({ currency: c.symbol, currencyPosition: c.position });
+    setCurrency(c.symbol);
+  };
+  const activeCode = CURRENCIES.find((c) => c.symbol === currency)?.code || 'TND';
 
   const load = useCallback(async () => {
     try {
@@ -3244,7 +3297,50 @@ function SettingsTab() {
   const enabled = !!info?.enabled;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl space-y-8">
+      {/* Currency */}
+      <div>
+        <h2 className="mb-1 text-lg font-bold">Paramètres · Devise</h2>
+        <p className="mb-4 text-sm text-white/40">
+          La devise s'applique partout (menu, caisse, factures, rapports).
+        </p>
+        <GlassCard hover={false}>
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-[#D4AF37]/15">
+              <DollarSign className="h-6 w-6 text-[#D4AF37]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold">Devise du café</h3>
+              <p className="mt-0.5 text-xs text-white/45">
+                Actuelle : <span className="font-mono text-[#D4AF37]">{formatMoney(10)}</span>
+              </p>
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {CURRENCIES.map((c) => {
+                  const active = c.code === activeCode;
+                  return (
+                    <button
+                      key={c.code}
+                      onClick={() => applyCurrency(c.code)}
+                      className={`rounded-xl border px-3 py-2.5 text-center transition-all active:scale-[0.97] ${
+                        active
+                          ? 'border-[#D4AF37] bg-[#D4AF37]/[0.12] text-[#D4AF37] ring-1 ring-[#D4AF37]/40'
+                          : 'border-white/[0.08] bg-white/[0.02] text-white/60 hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/[0.06]'
+                      }`}
+                      title={c.label}
+                    >
+                      <div className="text-base font-bold">{c.symbol}</div>
+                      <div className="mt-0.5 text-[10px] uppercase tracking-wider opacity-70">{c.code}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+      </div>
+
+      {/* Wi-Fi access */}
+      <div>
       <h2 className="mb-1 text-lg font-bold">Paramètres · Accès</h2>
       <p className="mb-6 text-sm text-white/40">
         Restreindre le menu client aux appareils connectés au Wi-Fi du café.
@@ -3302,6 +3398,7 @@ function SettingsTab() {
           </div>
         </div>
       </GlassCard>
+      </div>
     </div>
   );
 }
@@ -3361,7 +3458,7 @@ function LoyaltyTab() {
           <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">Points cumulés</div>
         </GlassCard>
         <GlassCard hover={false} className="text-center">
-          <div className="text-2xl font-bold text-blue-400">{totalSpent.toFixed(0)} DT</div>
+          <div className="text-2xl font-bold text-blue-400">{formatMoney(totalSpent)}</div>
           <div className="mt-1 text-[10px] uppercase tracking-wider text-white/40">Dépensé (total)</div>
         </GlassCard>
       </div>
@@ -3385,7 +3482,7 @@ function LoyaltyTab() {
                     </span>
                   </div>
                   <div className="mt-1 text-xs text-white/40">
-                    {m.visits} visite{m.visits !== 1 ? 's' : ''} · {m.totalSpent.toFixed(2)} DT dépensés
+                    {m.visits} visite{m.visits !== 1 ? 's' : ''} · {formatMoney(m.totalSpent)} dépensés
                     {m.phone ? ` · ${m.phone}` : ''}
                   </div>
                 </div>

@@ -9,8 +9,7 @@ import { ArrowLeft, FileText, Plus, Trash2, Printer, Check, Save, X } from 'luci
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import {
-  getSuppliers, addInvoice, nextInvoiceNumber, getInvoices, addAuditLog,
-} from '@/utils/store';
+  getSuppliers, addInvoice, nextInvoiceNumber, getInvoices, addAuditLog, formatMoney,} from '@/utils/store';
 import type { Supplier, SupplierProduct, InvoiceLine, Invoice } from '@/types';
 
 export default function CreateInvoice() {
@@ -112,7 +111,7 @@ export default function CreateInvoice() {
     addAuditLog({
       id: 'log-' + Date.now(),
       action: 'Invoice Created',
-      details: `${num} · ${selectedSupplier.name} · ${t.toFixed(2)} DT`,
+      details: `${num} · ${selectedSupplier.name} · ${formatMoney(t)}`,
       user: user?.name || 'Unknown',
       timestamp: new Date().toISOString(),
     });
@@ -215,7 +214,7 @@ export default function CreateInvoice() {
             </div>
             <div className="flex-1">
               <div className="font-semibold text-green-400">Invoice {saved.number} saved!</div>
-              <div className="text-xs text-white/50">Total: {saved.total.toFixed(2)} DT — ready to print.</div>
+              <div className="text-xs text-white/50">Total: {formatMoney(saved.total)} — ready to print.</div>
             </div>
           </div>
         )}
@@ -298,7 +297,7 @@ export default function CreateInvoice() {
                       <option value="" className="bg-[#12211C]">— Choose article —</option>
                       {productOptions.map((p) => (
                         <option key={p.id} value={p.id} className="bg-[#12211C]">
-                          {p.name}{p.unit ? ` / ${p.unit}` : ''} — {p.price.toFixed(2)} DT
+                          {p.name}{p.unit ? ` / ${p.unit}` : ''} — {formatMoney(p.price)}
                         </option>
                       ))}
                     </select>
@@ -347,10 +346,10 @@ export default function CreateInvoice() {
                       <tr key={l.id} className="border-t border-white/[0.04]">
                         <td className="px-4 py-2.5 text-white/40">{i + 1}</td>
                         <td className="px-4 py-2.5 font-medium">{l.productName}</td>
-                        <td className="px-4 py-2.5 text-right text-white/60">{l.unitPrice.toFixed(2)} DT</td>
+                        <td className="px-4 py-2.5 text-right text-white/60">{formatMoney(l.unitPrice)}</td>
                         <td className="px-4 py-2.5 text-right">{l.quantity}</td>
                         <td className="px-4 py-2.5 text-right font-bold text-[#D4AF37] print-gold">
-                          {(l.unitPrice * l.quantity).toFixed(2)} DT
+                          {formatMoney((l.unitPrice * l.quantity))}
                         </td>
                         <td className="no-print px-2 py-2 text-right">
                           {!saved && (
@@ -395,7 +394,7 @@ export default function CreateInvoice() {
               <div>
                 <div className="text-[10px] uppercase tracking-[0.2em] text-white/40">Total Consommation</div>
                 <div className="text-3xl sm:text-4xl font-black text-[#D4AF37] print-gold tracking-tight mt-1">
-                  {total.toFixed(2)} DT
+                  {formatMoney(total)}
                 </div>
               </div>
               <div className="text-right text-[10px] text-white/30">
