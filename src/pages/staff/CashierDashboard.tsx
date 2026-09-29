@@ -61,7 +61,7 @@ export default function CashierDashboard() {
     const all = getOrders();
     // Keep unpaid orders + PAID orders that still hold a table (not freed yet),
     // so a paid table stays visible with a "Payée" badge until "Libérer".
-    const relevant = all.filter((o) => o.status !== 'Paid' || o.tableNumber);
+    const relevant = all.filter((o) => o.status !== 'Cancelled' && (o.status !== 'Paid' || o.tableNumber));
     relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     setOrders(relevant);
 

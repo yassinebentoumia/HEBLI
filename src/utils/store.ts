@@ -725,6 +725,18 @@ export function deleteOrder(id: string): void {
   atomicWrite(KEYS.payments, remaining);
 }
 
+// Cancel an order (owner). Keeps the record but marks it Cancelled + frees its
+// table, so barista/waiter stop working on it and the client sees it's cancelled.
+export function cancelOrder(id: string): void {
+  const orders = getOrders();
+  const idx = orders.findIndex((o) => o.id === id);
+  if (idx === -1) return;
+  orders[idx].status = 'Cancelled';
+  orders[idx].tableNumber = undefined;
+  orders[idx].updatedAt = new Date().toISOString();
+  saveOrders(orders);
+}
+
 // Inventory
 export function getInventory(): InventoryItem[] {
   return safeRead<InventoryItem[]>(KEYS.inventory, defaultInventory);

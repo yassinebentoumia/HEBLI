@@ -25,6 +25,11 @@ const statusConfig: Record<OrderStatus, { bg: string; text: string; dot: string 
     text: 'text-emerald-400',
     dot: 'bg-emerald-400',
   },
+  Cancelled: {
+    bg: 'bg-red-500/10',
+    text: 'text-red-400',
+    dot: 'bg-red-400',
+  },
 };
 
 export default function StatusBadge({ status }: { status: OrderStatus }) {

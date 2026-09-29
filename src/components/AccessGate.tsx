@@ -8,6 +8,8 @@
 
 import { useEffect, useState } from 'react';
 import { WifiOff, Loader2, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getCurrentUser } from '@/utils/store';
 
 interface AccessInfo {
   enabled: boolean;
@@ -17,10 +19,14 @@ interface AccessInfo {
 }
 
 export default function AccessGate({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
   const [state, setState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
   const [info, setInfo] = useState<AccessInfo | null>(null);
 
   const check = async () => {
+    // A logged-in staff/owner is NEVER blocked (so the owner can always get in,
+    // even from home, to disable the lock).
+    if (getCurrentUser()) { setState('allowed'); return; }
     setState('checking');
     try {
       const res = await fetch('/api/access', { cache: 'no-store' });
@@ -69,12 +75,22 @@ export default function AccessGate({ children }: { children: React.ReactNode }) 
           This menu is only available on the café’s Wi-Fi. Please connect to HEBLI’s
           Wi-Fi and try again.
         </p>
-        <button
-          onClick={check}
-          className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors active:scale-[0.98]"
-        >
-          <RefreshCw className="h-4 w-4" /> Réessayer
-        </button>
+        <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row">
+          <button
+            onClick={check}
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors active:scale-[0.98]"
+          >
+            <RefreshCw className="h-4 w-4" /> Réessayer
+          </button>
+          {/* Staff/owner entrance — never blocked. Lets the owner log in from
+              anywhere and disable/change the Wi-Fi lock. */}
+          <button
+            onClick={() => navigate('/staff')}
+            className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-6 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 transition-colors"
+          >
+            Espace Personnel / Owner
+          </button>
+        </div>
         {info?.yourIp && (
           <p className="mt-4 text-[10px] text-white/15">IP: {info.yourIp}</p>
         )}

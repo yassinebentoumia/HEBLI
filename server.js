@@ -328,6 +328,41 @@ app.get('/api/state', (_req, res) => {
 // state.wifiLock = { enabled: boolean, cafeIp: string, updatedAt: number }
 // ============================================================
 
+// ------------------------------------------------------------------
+// HOW TO CHANGE THE CAFÉ IP FROM CODE (3 ways):
+//  1) EASIEST — set an env var on Render (no code change, no redeploy of code):
+//        CAFE_IP=41.226.10.5
+//     You can allow MULTIPLE networks with commas:
+//        CAFE_IP=41.226.10.5, 197.2.3.4
+//     When CAFE_IP is set, it ALWAYS wins over the stored/captured IP.
+//
+//  2) HARDCODE a default here (used only if no CAFE_IP env + none captured yet):
+const DEFAULT_CAFE_IPS = [
+  // '41.226.10.5',
+  // '197.2.3.4',
+];
+//
+//  3) API — POST /api/wifi-lock { enabled, cafeIp }  (the owner toggle uses this).
+// ------------------------------------------------------------------
+
+// Parse "1.2.3.4, 5.6.7.8" → ['1.2.3.4','5.6.7.8']
+function parseIpList(str) {
+  return String(str || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+// The list of café IPs currently allowed (env wins, then stored, then default).
+function allowedCafeIps() {
+  const fromEnv = parseIpList(process.env.CAFE_IP);
+  if (fromEnv.length) return fromEnv;
+  const lock = getWifiLock();
+  const stored = parseIpList(lock.cafeIp);
+  if (stored.length) return stored;
+  return DEFAULT_CAFE_IPS;
+}
+
 function getWifiLock() {
   if (!state.wifiLock || typeof state.wifiLock !== 'object') {
     state.wifiLock = { enabled: false, cafeIp: '', updatedAt: 0 };
@@ -339,8 +374,9 @@ function getWifiLock() {
 function isAccessAllowed(req) {
   const lock = getWifiLock();
   if (!lock.enabled) return true;         // lock off → everyone allowed
-  if (!lock.cafeIp) return true;          // no café IP captured yet → don't lock people out
-  return clientIp(req) === lock.cafeIp;   // must be on the same public IP (café Wi-Fi)
+  const list = allowedCafeIps();
+  if (!list.length) return true;          // no café IP configured yet → don't lock people out
+  return list.includes(clientIp(req));    // must be on one of the café's public IPs
 }
 
 // Client calls this on boot to know whether it may run.
@@ -350,27 +386,30 @@ app.get('/api/access', (req, res) => {
     enabled: !!lock.enabled,
     allowed: isAccessAllowed(req),
     yourIp: clientIp(req),
-    cafeIp: lock.cafeIp || '',
+    cafeIp: allowedCafeIps().join(', '),
+    source: process.env.CAFE_IP ? 'env' : (lock.cafeIp ? 'stored' : (DEFAULT_CAFE_IPS.length ? 'default' : 'none')),
   });
 });
 
-// Owner toggles the lock. Body: { enabled: boolean, cafeIp?: string }
-// When enabling, we snapshot the OWNER's current IP as the café IP unless one is
-// provided explicitly.
+// Owner toggles the lock / sets the café IP(s).
+// Body: { enabled: boolean, cafeIp?: string }  (cafeIp may be comma-separated)
+// When enabling with no cafeIp, we snapshot the OWNER's current IP.
 app.post('/api/wifi-lock', (req, res) => {
   const lock = getWifiLock();
   const enabled = !!(req.body && req.body.enabled);
   lock.enabled = enabled;
-  if (enabled) {
-    lock.cafeIp = (req.body && typeof req.body.cafeIp === 'string' && req.body.cafeIp)
-      ? req.body.cafeIp
-      : clientIp(req);
+  if (req.body && typeof req.body.cafeIp === 'string' && req.body.cafeIp.trim()) {
+    // explicit IP(s) provided → store them (works whether enabling or not)
+    lock.cafeIp = parseIpList(req.body.cafeIp).join(', ');
+  } else if (enabled && !lock.cafeIp) {
+    // enabling with nothing set → capture the caller's current public IP
+    lock.cafeIp = clientIp(req);
   }
   lock.updatedAt = Date.now();
   state.wifiLock = lock;
   state._updatedAt = Date.now();
   persist();
-  res.json({ ok: true, wifiLock: lock, yourIp: clientIp(req) });
+  res.json({ ok: true, wifiLock: lock, allowed: allowedCafeIps(), yourIp: clientIp(req) });
 });
 
 // POST partial state → server merges with existing

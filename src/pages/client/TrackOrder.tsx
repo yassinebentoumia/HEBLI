@@ -25,6 +25,7 @@ const statusColor: Record<OrderStatus, string> = {
   'In Preparation': 'text-blue-400 bg-blue-500/10 border-blue-500/20',
   'Ready': 'text-amber-500 bg-amber-500/10 border-amber-500/20',
   'Paid': 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+  'Cancelled': 'text-red-400 bg-red-500/10 border-red-500/20',
 };
 
 export default function TrackOrder() {

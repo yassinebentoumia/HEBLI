@@ -5,7 +5,7 @@
 
 export type UserRole = 'client' | 'barista' | 'cashier' | 'owner';
 
-export type OrderStatus = 'Pending' | 'In Preparation' | 'Paid' | 'Ready';
+export type OrderStatus = 'Pending' | 'In Preparation' | 'Paid' | 'Ready' | 'Cancelled';
 
 export type StaffRole = 'Barista' | 'Cashier' | 'Administrator';
 

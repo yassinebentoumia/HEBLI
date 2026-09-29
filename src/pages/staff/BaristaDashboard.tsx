@@ -40,16 +40,26 @@ function playBeep() {
     const ctx = new Ctx();
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 
-    const master = ctx.createGain();
-    master.gain.value = 0.9; // overall loudness
-    master.connect(ctx.destination);
+    // A compressor lets us push perceived loudness up without harsh clipping.
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -18;
+    comp.knee.value = 20;
+    comp.ratio.value = 12;
+    comp.attack.value = 0.003;
+    comp.release.value = 0.25;
 
-    // A two-tone bell-like ding (E6 → A5) with a longer ringing decay.
+    const master = ctx.createGain();
+    master.gain.value = 2.2; // BOOSTED overall loudness
+    master.connect(comp);
+    comp.connect(ctx.destination);
+
+    // A louder two-tone bell-like ding (E6 → A5) with a bright sparkle.
     const playChime = (offset: number) => {
       const tones = [
-        { freq: 1318.5, start: 0.00, length: 0.85, vol: 0.55 }, // E6
-        { freq: 880.0, start: 0.18, length: 0.85, vol: 0.45 }, // A5
-        { freq: 1760.0, start: 0.00, length: 0.30, vol: 0.18 }, // A6 (sparkle)
+        { freq: 1318.5, start: 0.00, length: 0.95, vol: 0.95 }, // E6
+        { freq: 880.0, start: 0.16, length: 0.95, vol: 0.85 }, // A5
+        { freq: 1760.0, start: 0.00, length: 0.35, vol: 0.45 }, // A6 (sparkle)
+        { freq: 659.3, start: 0.00, length: 0.95, vol: 0.55 }, // E5 (body/bass)
       ];
       tones.forEach((t) => {
         const osc = ctx.createOscillator();
@@ -60,18 +70,18 @@ function playBeep() {
         g.connect(master);
         const start = ctx.currentTime + offset + t.start;
         g.gain.setValueAtTime(0.0001, start);
-        g.gain.exponentialRampToValueAtTime(t.vol, start + 0.02);
+        g.gain.exponentialRampToValueAtTime(t.vol, start + 0.015);
         g.gain.exponentialRampToValueAtTime(0.0001, start + t.length);
         osc.start(start);
         osc.stop(start + t.length + 0.05);
       });
     };
 
-    // Ring 4 times, ~1.0s apart → total ~4 seconds
-    playChime(0.00);
-    playChime(1.00);
-    playChime(2.00);
-    playChime(3.00);
+    // Ring 6 times, ~0.95s apart → louder & longer (~6 seconds) so it's not missed.
+    for (let i = 0; i < 6; i++) playChime(i * 0.95);
+
+    // Also vibrate the phone (Android) for extra attention.
+    try { (navigator as any).vibrate?.([200, 120, 200, 120, 400]); } catch { /* ignore */ }
   } catch { /* ignore */ }
 }
 

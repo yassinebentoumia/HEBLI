@@ -33,7 +33,7 @@ import {
   Star,
   Calendar,
   Printer,
-  Wifi, WifiOff, CalendarDays,
+  Wifi, WifiOff, CalendarDays, XCircle,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -81,6 +81,7 @@ import {
   addNotification,
   getPayments,
   deleteOrder,
+  cancelOrder,
   deletePayment,
   getSuppliers,
   addSupplier,
@@ -2514,7 +2515,7 @@ function OrdersTab() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'today' | 'paid' | 'pending'>('all');
-  const [confirmDelete, setConfirmDelete] = useState<{ type: 'order' | 'payment' | 'today' | 'history'; id?: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'order' | 'payment' | 'today' | 'history' | 'cancel'; id?: string } | null>(null);
 
   const load = () => {
     setOrders(getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
@@ -2545,6 +2546,20 @@ function OrdersTab() {
   const handleDeleteOrder = (id: string) => {
     deleteOrder(id);
     addLog('Order Deleted', `Order ${id} was deleted by owner`);
+    load();
+    setConfirmDelete(null);
+  };
+
+  const handleCancelOrder = (id: string) => {
+    cancelOrder(id);
+    addLog('Order Cancelled', `Order ${id} was cancelled by owner`);
+    addNotification({
+      id: 'ntf-' + Date.now(),
+      target: 'all',
+      title: 'Commande annulée',
+      body: `La commande ${id} a été annulée par le propriétaire.`,
+      type: 'info', read: false, createdAt: new Date().toISOString(),
+    });
     load();
     setConfirmDelete(null);
   };
@@ -2675,13 +2690,24 @@ function OrdersTab() {
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <span className="text-base font-bold text-[#D4AF37]">{formatMoney(o.total)}</span>
-                    <button
-                      onClick={() => setConfirmDelete({ type: 'order', id: o.id })}
-                      className="rounded-lg border border-red-500/20 bg-red-500/5 p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
-                      title="Delete this order"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {o.status !== 'Paid' && o.status !== 'Cancelled' && (
+                        <button
+                          onClick={() => setConfirmDelete({ type: 'cancel', id: o.id })}
+                          className="rounded-lg border border-amber-500/25 bg-amber-500/5 px-2 py-1.5 text-[11px] font-semibold text-amber-400 hover:bg-amber-500/15 transition-colors flex items-center gap-1"
+                          title="Annuler la commande"
+                        >
+                          <XCircle className="h-3.5 w-3.5" /> Annuler
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setConfirmDelete({ type: 'order', id: o.id })}
+                        className="rounded-lg border border-red-500/20 bg-red-500/5 p-1.5 text-red-400 hover:bg-red-500/15 transition-colors"
+                        title="Delete this order"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </GlassCard>
@@ -2715,6 +2741,7 @@ function OrdersTab() {
                 </div>
                 <p className="text-sm text-white/70 mb-6">
                   {confirmDelete.type === 'order' && `Delete order ${confirmDelete.id}? Its payment record will also be removed.`}
+                  {confirmDelete.type === 'cancel' && `Annuler la commande ${confirmDelete.id} ? Le barista et le serveur seront prévenus et la table sera libérée.`}
                   {confirmDelete.type === 'today' && `Delete ALL ${payments.filter((p) => p.date === today).length} payment(s) from today?`}
                   {confirmDelete.type === 'history' && `Delete ALL ${orders.length} orders and ${payments.length} payments from the entire history?`}
                 </p>
@@ -2728,6 +2755,7 @@ function OrdersTab() {
                   <button
                     onClick={() => {
                       if (confirmDelete.type === 'order' && confirmDelete.id) handleDeleteOrder(confirmDelete.id);
+                      else if (confirmDelete.type === 'cancel' && confirmDelete.id) handleCancelOrder(confirmDelete.id);
                       else if (confirmDelete.type === 'today') handleDeleteToday();
                       else if (confirmDelete.type === 'history') handleDeleteHistory();
                     }}
