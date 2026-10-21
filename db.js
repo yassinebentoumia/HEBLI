@@ -52,7 +52,10 @@ export class PostgresStateStore {
       // Render app has a small number of writes; don't open a huge connection pool.
       max: 5,
       idleTimeoutMillis: 20_000,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: 8_000,
+      // Never let a stuck/slow database query freeze the café checkout forever.
+      query_timeout: 8_000,
+      statement_timeout: 8_000,
     });
   }
 
@@ -190,6 +193,48 @@ export class PostgresStateStore {
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Phase 2 fast path: persist only records changed by a REST mutation.
+   * Unlike saveState(), this never rewrites all historical audit logs/products/
+   * invoices on every order. This is what keeps checkout fast at real café scale.
+   */
+  async saveRecords(records, updatedAt, meta = {}) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const record of records) {
+        if (!record?.collection || !record?.data?.id) continue;
+        await client.query(
+          `INSERT INTO hebli_records (collection, record_id, data, created_at, updated_at)
+           VALUES ($1, $2, $3::jsonb, NOW(), NOW())
+           ON CONFLICT (collection, record_id)
+           DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+          [record.collection, String(record.data.id), JSON.stringify(record.data)],
+        );
+      }
+      await client.query(
+        `INSERT INTO hebli_meta (key, value, updated_at)
+         VALUES ('_updatedAt', $1::jsonb, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(updatedAt)],
+      );
+      for (const [key, value] of Object.entries(meta)) {
+        await client.query(
+          `INSERT INTO hebli_meta (key, value, updated_at)
+           VALUES ($1, $2::jsonb, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [key, JSON.stringify(value)],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       client.release();

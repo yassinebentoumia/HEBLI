@@ -176,7 +176,7 @@ export default function Menu() {
     } catch (error: any) {
       if (error?.code === 'table_occupied') setOrderError('Cette table est déjà occupée. Veuillez choisir une autre table.');
       else if (error?.code === 'cafe_wifi_required') setOrderError('Connectez-vous au Wi-Fi du café pour commander.');
-      else if (error?.code === 'request_failed') setOrderError('Le serveur ne répond pas. Vérifiez votre connexion puis réessayez.');
+      else if (error?.code === 'request_timeout' || error?.code === 'network_error' || error?.code === 'request_failed') setOrderError('Le serveur ne répond pas. Vérifiez votre connexion puis réessayez.');
       else setOrderError('La commande n’a pas été envoyée. Réessayez.');
     } finally {
       setSubmittingOrder(false);

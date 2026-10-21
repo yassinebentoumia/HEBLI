@@ -207,7 +207,7 @@ app.get('/api/health', (_req, res) => {
     persistence: persistenceMode, // MUST be "postgres" before official opening
     databaseConfigured: !!process.env.DATABASE_URL,
     phase2: true,
-    build: 'phase2-live-realtime-2026-10-21',
+    build: 'phase2-fast-checkout-realtime-2026-10-21',
     realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
 });
@@ -555,10 +555,29 @@ app.get('/api/v2/events', (req, res) => {
   req.on('close', () => sseClients.delete(id));
 });
 
-async function commitState(eventType = 'state.updated', payload = {}, audience = 'all') {
+async function commitState(eventType = 'state.updated', payload = {}, audience = 'all', changedRecords = null) {
   state._updatedAt = Date.now();
-  // Persist before broadcasting: an event always points to durable SQL state.
-  await persistNow();
+
+  // Phase 2 fast path: order/payment mutations persist ONLY their changed rows.
+  // The old full-state save rewrote every product, invoice, chat and audit log,
+  // which could leave the customer stuck on "Envoi de la commande…".
+  if (sqlStore && Array.isArray(changedRecords) && changedRecords.length > 0) {
+    pendingWrite = pendingWrite
+      .catch(() => {})
+      .then(() => sqlStore.saveRecords(changedRecords, state._updatedAt));
+    try {
+      await pendingWrite;
+    } catch (error) {
+      console.error('Fast PostgreSQL persist failed:', error?.message || error);
+      throw error;
+    }
+  } else {
+    // Legacy compatibility mutations still use a canonical full snapshot until
+    // those owner/support modules are migrated in a later phase.
+    await persistNow();
+  }
+
+  // Broadcast only after durable persistence succeeds.
   broadcastEvent(eventType, payload, audience);
   return state._updatedAt;
 }
@@ -570,15 +589,15 @@ function publicOrder(order) {
 }
 
 function appendAudit(action, details, user = 'System') {
-  collection('hebli_audit_logs').push({
-    id: newId('log'), action, details, user, timestamp: nowIso(),
-  });
+  const record = { id: newId('log'), action, details, user, timestamp: nowIso() };
+  collection('hebli_audit_logs').push(record);
+  return record;
 }
 
 function appendNotification(target, title, body, type = 'info') {
-  collection('hebli_notifications').push({
-    id: newId('ntf'), target, title, body, type, read: false, createdAt: nowIso(),
-  });
+  const record = { id: newId('ntf'), target, title, body, type, read: false, createdAt: nowIso() };
+  collection('hebli_notifications').push(record);
+  return record;
 }
 
 // Optional Wi-Fi access on public (customer) endpoints only.
@@ -728,10 +747,20 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
     updatedAt: now,
   };
   collection('hebli_orders').push(order);
-  appendAudit('Order Placed', `Order ${order.id} for Table ${tableNumber} • ${order.total.toFixed(2)}`, order.clientName);
-  appendNotification('Barista', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
-  appendNotification('Cashier', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
-  const updatedAt = await commitState('order.created', { orderId: order.id, tableNumber, status: order.status });
+  const audit = appendAudit('Order Placed', `Order ${order.id} for Table ${tableNumber} • ${order.total.toFixed(2)}`, order.clientName);
+  const baristaNotification = appendNotification('Barista', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
+  const waiterNotification = appendNotification('Cashier', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
+  const changed = [
+    { collection: 'hebli_orders', data: order },
+    { collection: 'hebli_audit_logs', data: audit },
+    { collection: 'hebli_notifications', data: baristaNotification },
+    { collection: 'hebli_notifications', data: waiterNotification },
+  ];
+  if (loyaltyId) {
+    const member = collection('hebli_loyalty').find((m) => m.id === loyaltyId);
+    if (member) changed.push({ collection: 'hebli_loyalty', data: member });
+  }
+  const updatedAt = await commitState('order.created', { orderId: order.id, tableNumber, status: order.status }, 'all', changed);
   res.status(201).json({ data: publicOrder(order), updatedAt });
 });
 
@@ -761,8 +790,13 @@ app.patch('/api/v2/orders/:id', requireAuth(['Barista', 'Administrator']), async
     order.tableNumber = n;
   }
   order.updatedAt = nowIso();
-  appendAudit('Order Updated', `Order ${order.id} → ${order.status}`, req.staff.name);
-  const updatedAt = await commitState('order.updated', { orderId: order.id, tableNumber: order.tableNumber, status: order.status });
+  const audit = appendAudit('Order Updated', `Order ${order.id} → ${order.status}`, req.staff.name);
+  const updatedAt = await commitState(
+    'order.updated',
+    { orderId: order.id, tableNumber: order.tableNumber, status: order.status },
+    'all',
+    [{ collection: 'hebli_orders', data: order }, { collection: 'hebli_audit_logs', data: audit }],
+  );
   res.json({ data: publicOrder(order), updatedAt });
 });
 
@@ -776,9 +810,18 @@ app.post('/api/v2/orders/:id/cancel', requireAuth(['Administrator']), async (req
   order.tableNumber = undefined;
   order.updatedAt = nowIso();
   const reason = req.body?.reason ? ` — ${String(req.body.reason).slice(0, 200)}` : '';
-  appendAudit('Order Cancelled', `Order ${order.id} cancelled${reason}`, req.staff.name);
-  appendNotification('all', 'Commande annulée', `La commande ${order.id} a été annulée.${reason}`, 'info');
-  const updatedAt = await commitState('order.cancelled', { orderId: order.id, status: order.status });
+  const audit = appendAudit('Order Cancelled', `Order ${order.id} cancelled${reason}`, req.staff.name);
+  const notification = appendNotification('all', 'Commande annulée', `La commande ${order.id} a été annulée.${reason}`, 'info');
+  const updatedAt = await commitState(
+    'order.cancelled',
+    { orderId: order.id, status: order.status },
+    'all',
+    [
+      { collection: 'hebli_orders', data: order },
+      { collection: 'hebli_audit_logs', data: audit },
+      { collection: 'hebli_notifications', data: notification },
+    ],
+  );
   res.json({ data: publicOrder(order), updatedAt });
 });
 
@@ -810,7 +853,7 @@ app.post('/api/v2/orders/:id/pay', requireAuth(['Cashier', 'Administrator']), as
   order.status = 'Paid';
   order.updatedAt = now.toISOString();
   collection('hebli_payments').push(payment);
-  appendAudit('Payment Received', `${order.total.toFixed(2)} paid for ${order.id}`, payment.cashierName);
+  const audit = appendAudit('Payment Received', `${order.total.toFixed(2)} paid for ${order.id}`, payment.cashierName);
 
   // Loyalty points remain server-side/atomic (1 point per currency unit).
   if (order.loyaltyId && !order.loyaltyAwarded) {
@@ -825,7 +868,16 @@ app.post('/api/v2/orders/:id/pay', requireAuth(['Cashier', 'Administrator']), as
     }
   }
 
-  const updatedAt = await commitState('order.paid', { orderId: order.id, tableNumber: order.tableNumber, status: order.status });
+  const changed = [
+    { collection: 'hebli_orders', data: order },
+    { collection: 'hebli_payments', data: payment },
+    { collection: 'hebli_audit_logs', data: audit },
+  ];
+  if (order.loyaltyId) {
+    const member = collection('hebli_loyalty').find((m) => m.id === order.loyaltyId);
+    if (member) changed.push({ collection: 'hebli_loyalty', data: member });
+  }
+  const updatedAt = await commitState('order.paid', { orderId: order.id, tableNumber: order.tableNumber, status: order.status }, 'all', changed);
   res.status(201).json({ data: { order: publicOrder(order), payment }, updatedAt });
 });
 
@@ -840,8 +892,12 @@ app.post('/api/v2/tables/:number/free', requireAuth(['Cashier', 'Administrator']
     return res.status(409).json({ error: 'active_order_on_table' });
   }
   affected.forEach((o) => { o.tableNumber = undefined; o.updatedAt = nowIso(); });
-  appendAudit('Table Freed', `Table ${number} freed`, req.staff.name);
-  const updatedAt = await commitState('table.freed', { tableNumber: number, freedOrders: affected.map((o) => o.id) });
+  const audit = appendAudit('Table Freed', `Table ${number} freed`, req.staff.name);
+  const changed = [
+    ...affected.map((order) => ({ collection: 'hebli_orders', data: order })),
+    { collection: 'hebli_audit_logs', data: audit },
+  ];
+  const updatedAt = await commitState('table.freed', { tableNumber: number, freedOrders: affected.map((o) => o.id) }, 'all', changed);
   res.json({ data: { tableNumber: number, freedOrders: affected.map((o) => o.id) }, updatedAt });
 });
 

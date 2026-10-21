@@ -27,11 +27,24 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
-    ...init,
-  });
+  // A checkout must never spin forever. If the network/server is unavailable,
+  // return a clear timeout error so the customer can retry.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
+      signal: controller.signal,
+      ...init,
+    });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw new ApiError(408, 'request_timeout');
+    throw new ApiError(0, 'network_error');
+  } finally {
+    window.clearTimeout(timeout);
+  }
   if (!res.ok) {
     let code = 'request_failed';
     try { code = (await res.json()).error || code; } catch { /* ignore */ }
