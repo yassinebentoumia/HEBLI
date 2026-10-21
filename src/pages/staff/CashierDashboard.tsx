@@ -86,8 +86,13 @@ export default function CashierDashboard() {
     return () => { alive = false; };
   }, [loadOrders]);
 
-  // Real-time server events replace order/table polling.
-  useEffect(() => subscribePhase2Events('staff', () => { void loadOrders(); }), [loadOrders]);
+  // Realtime first (SSE) + compact 4s table/order safety check. The waiter
+  // never has to refresh manually, even when a PWA/mobile stream reconnects.
+  useEffect(() => {
+    const unsubscribe = subscribePhase2Events('staff', () => { void loadOrders(); }, () => { void loadOrders(); });
+    const safety = setInterval(() => { void loadOrders(); }, 4_000);
+    return () => { unsubscribe(); clearInterval(safety); };
+  }, [loadOrders]);
 
   // ---- Derived lists -------------------------------------------------------
   const newOrders = orders.filter((o) => o.status === 'Pending');

@@ -154,8 +154,14 @@ export default function BaristaDashboard() {
 
   useEffect(() => { void loadOrders(); }, [loadOrders]);
 
-  // Real-time: refresh only when server emits an order/table event.
-  useEffect(() => subscribePhase2Events('staff', () => { void loadOrders(); }), [loadOrders]);
+  // Realtime first (SSE). A small role-scoped 4s safety check guarantees the
+  // kitchen never needs a manual browser refresh if a mobile/PWA stream drops.
+  // This fetches only kitchen orders, not the old full café snapshot.
+  useEffect(() => {
+    const unsubscribe = subscribePhase2Events('staff', () => { void loadOrders(); }, () => { void loadOrders(); });
+    const safety = setInterval(() => { void loadOrders(); }, 4_000);
+    return () => { unsubscribe(); clearInterval(safety); };
+  }, [loadOrders]);
 
   const startPreparation = async (orderId: string) => {
     try { await updateV2Order(orderId, { status: 'In Preparation' }); await loadOrders(); } catch { /* keep last state */ }

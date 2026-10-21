@@ -82,7 +82,10 @@ export default function Menu() {
   useEffect(() => {
     if (!cartOpen) return;
     void refreshTables();
-    return subscribePhase2Events('client', () => { void refreshTables(); });
+    const unsubscribe = subscribePhase2Events('client', () => { void refreshTables(); }, () => { void refreshTables(); });
+    // Tiny table-only fallback: no manual refresh needed after mobile/PWA wake-up.
+    const safety = setInterval(() => { void refreshTables(); }, 4_000);
+    return () => { unsubscribe(); clearInterval(safety); };
   }, [cartOpen, refreshTables]);
 
   const filtered = products.filter((p) => {

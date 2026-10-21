@@ -207,6 +207,7 @@ app.get('/api/health', (_req, res) => {
     persistence: persistenceMode, // MUST be "postgres" before official opening
     databaseConfigured: !!process.env.DATABASE_URL,
     phase2: true,
+    build: 'phase2-live-realtime-2026-10-21',
     realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
 });

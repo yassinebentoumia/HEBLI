@@ -71,13 +71,13 @@ export default function TrackOrder() {
     }
   }, [loadOrders]);
 
-  // SSE is immediate. A 15s table-only fallback handles a dropped mobile stream
-  // without refreshing the page or downloading the whole café state.
+  // SSE is immediate. A compact 4s table-only fallback guarantees tracking
+  // updates without manual refresh when mobile/PWA SSE is briefly interrupted.
   useEffect(() => {
     if (!trackedTable) return;
     const refresh = () => { void loadOrders(trackedTable, clientName); };
-    const unsubscribe = subscribePhase2Events('client', refresh);
-    const fallback = setInterval(refresh, 15_000);
+    const unsubscribe = subscribePhase2Events('client', refresh, refresh);
+    const fallback = setInterval(refresh, 4_000);
     return () => { unsubscribe(); clearInterval(fallback); };
   }, [trackedTable, clientName, loadOrders]);
 
