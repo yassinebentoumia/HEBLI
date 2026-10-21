@@ -50,6 +50,10 @@ let sqlStore = null;
 let persistenceMode = 'memory';
 let saveTimer = null;
 let pendingWrite = Promise.resolve();
+// Last durable SQL snapshot. Used to persist only changed records on every
+// legacy sync, avoiding a full database rewrite when any device updates.
+let durableRecords = new Map();
+let durableTombstones = new Map();
 
 function loadLegacyFile() {
   try {
@@ -60,6 +64,58 @@ function loadLegacyFile() {
   } catch (e) {
     console.warn('Could not load legacy data.json:', e?.message);
   }
+}
+
+function recordKey(collection, id) { return `${collection}|${String(id)}`; }
+function recordFingerprint(data) { return JSON.stringify(data); }
+
+function rebuildDurableSnapshot(source = state) {
+  durableRecords = new Map();
+  durableTombstones = new Map();
+  Object.entries(source).forEach(([collection, value]) => {
+    if (!Array.isArray(value) || collection === 'hebli_tombstones') return;
+    value.forEach((item) => {
+      if (item && typeof item === 'object' && item.id !== undefined && item.id !== null) {
+        durableRecords.set(recordKey(collection, item.id), recordFingerprint(item));
+      }
+    });
+  });
+  const tombstones = Array.isArray(source.hebli_tombstones) ? source.hebli_tombstones : [];
+  tombstones.forEach((tomb) => {
+    if (tomb?.key && tomb.id !== undefined && tomb.deletedAt) {
+      durableTombstones.set(recordKey(tomb.key, tomb.id), Number(tomb.deletedAt));
+    }
+  });
+}
+
+function calculateStateChanges() {
+  const currentRecords = new Map();
+  const upserts = [];
+  Object.entries(state).forEach(([collection, value]) => {
+    if (!Array.isArray(value) || collection === 'hebli_tombstones') return;
+    value.forEach((item) => {
+      if (!item || typeof item !== 'object' || item.id === undefined || item.id === null) return;
+      const key = recordKey(collection, item.id);
+      const fingerprint = recordFingerprint(item);
+      currentRecords.set(key, fingerprint);
+      if (durableRecords.get(key) !== fingerprint) upserts.push({ collection, data: item });
+    });
+  });
+  const deletes = [];
+  for (const key of durableRecords.keys()) {
+    if (!currentRecords.has(key)) {
+      const [collection, ...id] = key.split('|');
+      deletes.push({ collection, id: id.join('|') });
+    }
+  }
+  const tombstones = [];
+  const activeTombstones = Array.isArray(state.hebli_tombstones) ? state.hebli_tombstones : [];
+  activeTombstones.forEach((tomb) => {
+    if (!tomb?.key || tomb.id === undefined || !tomb.deletedAt) return;
+    const key = recordKey(tomb.key, tomb.id);
+    if (durableTombstones.get(key) !== Number(tomb.deletedAt)) tombstones.push(tomb);
+  });
+  return { upserts, deletes, tombstones, currentRecords };
 }
 
 async function bootstrapPersistence() {
@@ -91,6 +147,7 @@ async function bootstrapPersistence() {
       console.log('✓ Loaded HEBLI state from PostgreSQL');
     }
     persistenceMode = 'postgres';
+    rebuildDurableSnapshot(state);
   } catch (error) {
     console.error('✗ PostgreSQL startup failed:', error?.message || error);
     if (process.env.REQUIRE_DATABASE === 'true') throw error;
@@ -107,13 +164,28 @@ await bootstrapPersistence();
 // Queue writes so rapid client updates cannot overlap/reorder database transactions.
 async function persistNow() {
   if (sqlStore) {
+    const changes = calculateStateChanges();
+    // No changed entity rows: do not create an expensive write queue.
+    if (!changes.upserts.length && !changes.deletes.length && !changes.tombstones.length) return;
     pendingWrite = pendingWrite
       .catch(() => {})
-      .then(() => sqlStore.saveState(state));
+      .then(() => sqlStore.saveChanges({
+        upserts: changes.upserts,
+        deletes: changes.deletes,
+        tombstones: changes.tombstones,
+        updatedAt: state._updatedAt || Date.now(),
+        meta: state.wifiLock ? { wifiLock: state.wifiLock } : {},
+      }));
     try {
       await pendingWrite;
+      // Advance the durable baseline only after the transaction committed.
+      durableRecords = changes.currentRecords;
+      const tombstones = Array.isArray(state.hebli_tombstones) ? state.hebli_tombstones : [];
+      durableTombstones = new Map(tombstones.filter((t) => t?.key && t.id !== undefined && t.deletedAt)
+        .map((t) => [recordKey(t.key, t.id), Number(t.deletedAt)]));
     } catch (error) {
-      console.error('PostgreSQL persist failed:', error?.message || error);
+      console.error('PostgreSQL incremental persist failed:', error?.message || error);
+      throw error;
     }
     return;
   }
@@ -130,7 +202,9 @@ async function persistNow() {
 
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { void persistNow(); }, 350);
+  saveTimer = setTimeout(() => {
+    void persistNow().catch((error) => console.error('Scheduled PostgreSQL persist failed:', error?.message || error));
+  }, 350);
 }
 
 // Flush pending SQL writes on Render redeploy/restart.
@@ -208,7 +282,7 @@ app.get('/api/health', (_req, res) => {
     databaseConfigured: !!process.env.DATABASE_URL,
     fastWrites: !!(sqlStore && typeof sqlStore.saveRecords === 'function'),
     phase2: true,
-    build: 'phase2-fast-order-write-2026-10-21',
+    build: 'phase2-incremental-sql-core-2026-10-21',
     realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
 });
@@ -568,6 +642,12 @@ async function commitState(eventType = 'state.updated', payload = {}, audience =
       .then(() => sqlStore.saveRecords(changedRecords, state._updatedAt));
     try {
       await pendingWrite;
+      // Keep legacy incremental baseline aligned with V2 writes too.
+      changedRecords.forEach((record) => {
+        if (record?.collection && record?.data?.id !== undefined) {
+          durableRecords.set(recordKey(record.collection, record.data.id), recordFingerprint(record.data));
+        }
+      });
     } catch (error) {
       console.error('Fast PostgreSQL persist failed:', error?.message || error);
       throw error;

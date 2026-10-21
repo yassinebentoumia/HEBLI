@@ -114,15 +114,21 @@ export class PostgresStateStore {
       this.pool.query('SELECT key, value, EXTRACT(EPOCH FROM updated_at) * 1000 AS updated_ms FROM hebli_meta'),
     ]);
 
-    for (const row of records.rows) {
-      if (!state[row.collection]) state[row.collection] = [];
-      state[row.collection].push(row.data);
-    }
-    state[TOMBSTONE_KEY] = tombstones.rows.map((t) => ({
+    const tombstoneList = tombstones.rows.map((t) => ({
       key: t.collection,
       id: t.record_id,
       deletedAt: Number(t.deleted_at),
     }));
+    const deleted = new Map(tombstoneList.map((t) => [`${t.key}|${t.id}`, t.deletedAt]));
+    for (const row of records.rows) {
+      const tombTime = deleted.get(`${row.collection}|${row.data?.id}`);
+      const itemTime = new Date(row.data?.updatedAt || row.data?.timestamp || row.data?.createdAt || 0).getTime();
+      // Never resurrect deleted staff/products/chat/orders on restart.
+      if (tombTime && tombTime >= itemTime) continue;
+      if (!state[row.collection]) state[row.collection] = [];
+      state[row.collection].push(row.data);
+    }
+    state[TOMBSTONE_KEY] = tombstoneList;
 
     for (const row of meta.rows) {
       state[row.key] = row.value;
@@ -241,6 +247,71 @@ export class PostgresStateStore {
           [record.collection, String(record.data.id), JSON.stringify(record.data)],
         );
       }
+      await client.query(
+        `INSERT INTO hebli_meta (key, value, updated_at)
+         VALUES ('_updatedAt', $1::jsonb, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [JSON.stringify(updatedAt)],
+      );
+      for (const [key, value] of Object.entries(meta)) {
+        await client.query(
+          `INSERT INTO hebli_meta (key, value, updated_at)
+           VALUES ($1, $2::jsonb, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+          [key, JSON.stringify(value)],
+        );
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Incremental state sync for legacy /api/state traffic.
+   * Applies only changed entity rows + explicit deletes/tombstones. This replaces
+   * the former expensive saveState(state) on every device sync.
+   */
+  async saveChanges({ upserts = [], deletes = [], tombstones = [], updatedAt, meta = {} }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const item of deletes) {
+        if (!item?.collection || item.id === undefined) continue;
+        await client.query(
+          'DELETE FROM hebli_records WHERE collection = $1 AND record_id = $2',
+          [item.collection, String(item.id)],
+        );
+      }
+
+      for (const record of upserts) {
+        if (!record?.collection || !record?.data?.id) continue;
+        await client.query(
+          `INSERT INTO hebli_records (collection, record_id, data, created_at, updated_at)
+           VALUES ($1, $2, $3::jsonb, NOW(), NOW())
+           ON CONFLICT (collection, record_id)
+           DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+          [record.collection, String(record.data.id), JSON.stringify(record.data)],
+        );
+      }
+
+      for (const tomb of tombstones) {
+        if (!tomb?.key || tomb.id === undefined || !tomb.deletedAt) continue;
+        await client.query(
+          `INSERT INTO hebli_tombstones (collection, record_id, deleted_at)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (collection, record_id)
+           DO UPDATE SET deleted_at = EXCLUDED.deleted_at`,
+          [String(tomb.key), String(tomb.id), Number(tomb.deletedAt)],
+        );
+      }
+      // Prune old tombstones exactly like the client sync does.
+      await client.query('DELETE FROM hebli_tombstones WHERE deleted_at < $1', [Date.now() - 30 * 24 * 60 * 60 * 1000]);
+
       await client.query(
         `INSERT INTO hebli_meta (key, value, updated_at)
          VALUES ('_updatedAt', $1::jsonb, NOW())
