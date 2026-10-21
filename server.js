@@ -48,6 +48,10 @@ function clientIp(req) {
 let state = { _updatedAt: 0 };
 let sqlStore = null;
 let persistenceMode = 'memory';
+let databaseReady = false;
+let databaseConnecting = false;
+let databaseRetryTimer = null;
+let databaseLastError = null;
 let saveTimer = null;
 let pendingWrite = Promise.resolve();
 // Last durable SQL snapshot. Used to persist only changed records on every
@@ -118,51 +122,87 @@ function calculateStateChanges() {
   return { upserts, deletes, tombstones, currentRecords };
 }
 
+function scheduleDatabaseRetry() {
+  if (databaseRetryTimer || !process.env.DATABASE_URL) return;
+  databaseRetryTimer = setTimeout(() => {
+    databaseRetryTimer = null;
+    void connectDatabase();
+  }, 10_000);
+}
+
+async function connectDatabase() {
+  const url = process.env.DATABASE_URL;
+  if (!url || databaseReady || databaseConnecting) return databaseReady;
+  databaseConnecting = true;
+  persistenceMode = 'database-reconnecting';
+
+  let candidate = null;
+  try {
+    // Dynamic import means local frontend-only builds don't require pg until SQL is configured.
+    const { PostgresStateStore } = await import('./db.js');
+    candidate = new PostgresStateStore(url);
+    await candidate.init();
+
+    if (await candidate.isEmpty() && fs.existsSync(DATA_FILE)) {
+      // One-time migration from the previous file backend.
+      loadLegacyFile();
+      await candidate.saveState(state);
+      console.log('✓ Migrated legacy data.json → PostgreSQL');
+    } else {
+      state = await candidate.loadState();
+      console.log('✓ Loaded HEBLI state from PostgreSQL');
+    }
+
+    sqlStore = candidate;
+    databaseReady = true;
+    databaseLastError = null;
+    persistenceMode = 'postgres';
+    rebuildDurableSnapshot(state);
+    console.log('✓ PostgreSQL connection ready');
+  } catch (error) {
+    await candidate?.close?.().catch(() => {});
+    databaseReady = false;
+    sqlStore = null;
+    databaseLastError = String(error?.message || error);
+    persistenceMode = 'database-reconnecting';
+    console.error('⚠ PostgreSQL unavailable — server stays online and will retry:', databaseLastError);
+    scheduleDatabaseRetry();
+  } finally {
+    databaseConnecting = false;
+  }
+  return databaseReady;
+}
+
 async function bootstrapPersistence() {
   const url = process.env.DATABASE_URL;
   if (!url) {
     if (process.env.REQUIRE_DATABASE === 'true') {
-      throw new Error('DATABASE_URL is required (REQUIRE_DATABASE=true). Add Neon DATABASE_URL in Render Environment.');
+      // Keep process online to expose health diagnostics, but do not allow writes.
+      persistenceMode = 'database-misconfigured';
+      databaseLastError = 'DATABASE_URL is required (REQUIRE_DATABASE=true).';
+      console.error(`✗ ${databaseLastError}`);
+      return;
     }
-    // Safe local/demo fallback only. Render production should set REQUIRE_DATABASE=true.
+    // Local/demo fallback only. Render production must set REQUIRE_DATABASE=true.
     persistenceMode = 'legacy-file';
+    databaseReady = true;
     loadLegacyFile();
     console.warn('⚠ DATABASE_URL is missing — using legacy data.json fallback. NOT SAFE for production.');
     return;
   }
 
-  try {
-    // Dynamic import means local frontend-only builds don't require pg until SQL is configured.
-    const { PostgresStateStore } = await import('./db.js');
-    sqlStore = new PostgresStateStore(url);
-    await sqlStore.init();
-
-    if (await sqlStore.isEmpty() && fs.existsSync(DATA_FILE)) {
-      // One-time migration from the previous file backend.
-      loadLegacyFile();
-      await sqlStore.saveState(state);
-      console.log('✓ Migrated legacy data.json → PostgreSQL');
-    } else {
-      state = await sqlStore.loadState();
-      console.log('✓ Loaded HEBLI state from PostgreSQL');
-    }
-    persistenceMode = 'postgres';
-    rebuildDurableSnapshot(state);
-  } catch (error) {
-    console.error('✗ PostgreSQL startup failed:', error?.message || error);
-    if (process.env.REQUIRE_DATABASE === 'true') throw error;
-    // Do not lose the ability to run locally while configuring SQL.
-    persistenceMode = 'legacy-file';
-    loadLegacyFile();
-    console.warn('⚠ Falling back to legacy data.json. Fix DATABASE_URL before production.');
-  }
+  // IMPORTANT: do not block Render startup waiting for a sleeping Neon compute.
+  // Start connection asynchronously; APIs return a clear 503 until it succeeds.
+  void connectDatabase();
 }
 
-// Top-level await is supported because this project is ESM ("type": "module").
 await bootstrapPersistence();
 
 // Queue writes so rapid client updates cannot overlap/reorder database transactions.
 async function persistNow() {
+  if (process.env.REQUIRE_DATABASE === 'true' && !databaseReady) {
+    throw new Error('database_unavailable');
+  }
   if (sqlStore) {
     const changes = calculateStateChanges();
     // No changed entity rows: do not create an expensive write queue.
@@ -210,7 +250,11 @@ function persist() {
 // Flush pending SQL writes on Render redeploy/restart.
 async function flushAndExit() {
   if (saveTimer) clearTimeout(saveTimer);
-  await persistNow();
+  // If Neon is currently reconnecting, there is nothing durable to flush yet.
+  // Never make a Render shutdown/redeploy crash because DB is temporarily asleep.
+  try { await persistNow(); } catch (error) {
+    console.warn('Skipping shutdown flush while database is unavailable:', error?.message || error);
+  }
   if (sqlStore) await sqlStore.close().catch(() => {});
   process.exit(0);
 }
@@ -274,17 +318,29 @@ function mergeArrays(existing, incoming, deletedIds) {
 
 // Health check
 app.get('/api/health', (_req, res) => {
-  res.json({
-    ok: true,
+  res.status(databaseReady ? 200 : 503).json({
+    ok: databaseReady,
     updatedAt: state._updatedAt || 0,
     aiProvider: aiProvider(),
     persistence: persistenceMode, // MUST be "postgres" before official opening
     databaseConfigured: !!process.env.DATABASE_URL,
+    databaseEndpoint: process.env.DATABASE_URL?.includes('-pooler.') ? 'pooled' : 'direct-or-unknown',
+    databaseReady,
+    databaseLastError: databaseReady ? null : databaseLastError,
     fastWrites: !!(sqlStore && typeof sqlStore.saveRecords === 'function'),
     phase2: true,
     build: 'phase2-incremental-sql-core-2026-10-21',
     realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
+});
+
+// When Neon is waking/reconnecting, keep Render process alive but never accept
+// orders or sync an empty in-memory state. Client receives a clear retryable 503.
+app.use('/api', (req, res, next) => {
+  if (process.env.REQUIRE_DATABASE === 'true' && !databaseReady) {
+    return res.status(503).json({ error: 'database_reconnecting', retryAfterSeconds: 10 });
+  }
+  next();
 });
 
 // ============================================================

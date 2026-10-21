@@ -58,8 +58,10 @@ export class PostgresStateStore {
       // Render Free + Neon pooled endpoint: small pool prevents connection bursts.
       max: 3,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 35_000,
-      query_timeout: 35_000,
+      // Fail this individual attempt reasonably quickly. server.js retries in
+      // background, so a sleeping Neon instance never crashes the Render app.
+      connectionTimeoutMillis: 15_000,
+      // Do NOT set query_timeout here: Neon can be waking from scale-to-zero.
       keepAlive: true,
       keepAliveInitialDelayMillis: 10_000,
     });
