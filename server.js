@@ -38,44 +38,110 @@ function clientIp(req) {
   return ip;
 }
 
-// Load persisted state on startup
+// ============================================================
+// PERSISTENCE — PostgreSQL first, data.json only as legacy fallback
+// ============================================================
+// Production: set DATABASE_URL (Neon/Supabase/Postgres connection string) and
+// REQUIRE_DATABASE=true on Render. On the first SQL boot, an existing data.json
+// is imported ONCE if the database is empty.
 let state = { _updatedAt: 0 };
-try {
-  if (fs.existsSync(DATA_FILE)) {
-    state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-    console.log('Loaded state from data.json');
+let sqlStore = null;
+let persistenceMode = 'memory';
+let saveTimer = null;
+let pendingWrite = Promise.resolve();
+
+function loadLegacyFile() {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      state = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+      console.log('⚠ Loaded legacy state from data.json (move to DATABASE_URL for production)');
+    }
+  } catch (e) {
+    console.warn('Could not load legacy data.json:', e?.message);
   }
-} catch (e) {
-  console.warn('Could not load state:', e?.message);
 }
 
-// Throttled file save
-let saveTimer = null;
-// Write state to disk immediately (used by the throttled persist + on shutdown).
-function persistNow() {
+async function bootstrapPersistence() {
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    if (process.env.REQUIRE_DATABASE === 'true') {
+      throw new Error('DATABASE_URL is required (REQUIRE_DATABASE=true). Add Neon DATABASE_URL in Render Environment.');
+    }
+    // Safe local/demo fallback only. Render production should set REQUIRE_DATABASE=true.
+    persistenceMode = 'legacy-file';
+    loadLegacyFile();
+    console.warn('⚠ DATABASE_URL is missing — using legacy data.json fallback. NOT SAFE for production.');
+    return;
+  }
+
+  try {
+    // Dynamic import means local frontend-only builds don't require pg until SQL is configured.
+    const { PostgresStateStore } = await import('./db.js');
+    sqlStore = new PostgresStateStore(url);
+    await sqlStore.init();
+
+    if (await sqlStore.isEmpty() && fs.existsSync(DATA_FILE)) {
+      // One-time migration from the previous file backend.
+      loadLegacyFile();
+      await sqlStore.saveState(state);
+      console.log('✓ Migrated legacy data.json → PostgreSQL');
+    } else {
+      state = await sqlStore.loadState();
+      console.log('✓ Loaded HEBLI state from PostgreSQL');
+    }
+    persistenceMode = 'postgres';
+  } catch (error) {
+    console.error('✗ PostgreSQL startup failed:', error?.message || error);
+    if (process.env.REQUIRE_DATABASE === 'true') throw error;
+    // Do not lose the ability to run locally while configuring SQL.
+    persistenceMode = 'legacy-file';
+    loadLegacyFile();
+    console.warn('⚠ Falling back to legacy data.json. Fix DATABASE_URL before production.');
+  }
+}
+
+// Top-level await is supported because this project is ESM ("type": "module").
+await bootstrapPersistence();
+
+// Queue writes so rapid client updates cannot overlap/reorder database transactions.
+async function persistNow() {
+  if (sqlStore) {
+    pendingWrite = pendingWrite
+      .catch(() => {})
+      .then(() => sqlStore.saveState(state));
+    try {
+      await pendingWrite;
+    } catch (error) {
+      console.error('PostgreSQL persist failed:', error?.message || error);
+    }
+    return;
+  }
+
+  // Legacy fallback for local demos ONLY. Do not depend on this on Render Free.
   try {
     const tmp = DATA_FILE + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(state));
     fs.renameSync(tmp, DATA_FILE);
   } catch (e) {
-    console.warn('Persist failed:', e?.message);
+    console.warn('Legacy persist failed:', e?.message);
   }
 }
+
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(persistNow, 500);
+  saveTimer = setTimeout(() => { void persistNow(); }, 350);
 }
 
-// Guarantee nothing is lost on redeploy / restart (important on Render's free
-// tier where the instance spins down): flush pending state on shutdown signals.
-function flushAndExit() {
+// Flush pending SQL writes on Render redeploy/restart.
+async function flushAndExit() {
   if (saveTimer) clearTimeout(saveTimer);
-  persistNow();
+  await persistNow();
+  if (sqlStore) await sqlStore.close().catch(() => {});
   process.exit(0);
 }
-process.on('SIGTERM', flushAndExit);
-process.on('SIGINT', flushAndExit);
-process.on('beforeExit', persistNow);
+process.once('SIGTERM', () => { void flushAndExit(); });
+process.once('SIGINT', () => { void flushAndExit(); });
+process.once('beforeExit', () => { void persistNow(); });
 
 const TOMBSTONE_KEY = 'hebli_tombstones';
 
@@ -137,6 +203,8 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     updatedAt: state._updatedAt || 0,
     aiProvider: aiProvider(),
+    persistence: persistenceMode, // MUST be "postgres" before official opening
+    databaseConfigured: !!process.env.DATABASE_URL,
   });
 });
 
