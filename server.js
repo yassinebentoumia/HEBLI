@@ -206,8 +206,9 @@ app.get('/api/health', (_req, res) => {
     aiProvider: aiProvider(),
     persistence: persistenceMode, // MUST be "postgres" before official opening
     databaseConfigured: !!process.env.DATABASE_URL,
+    fastWrites: !!(sqlStore && typeof sqlStore.saveRecords === 'function'),
     phase2: true,
-    build: 'phase2-fast-checkout-realtime-2026-10-21',
+    build: 'phase2-fast-order-write-2026-10-21',
     realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
 });
@@ -561,7 +562,7 @@ async function commitState(eventType = 'state.updated', payload = {}, audience =
   // Phase 2 fast path: order/payment mutations persist ONLY their changed rows.
   // The old full-state save rewrote every product, invoice, chat and audit log,
   // which could leave the customer stuck on "Envoi de la commande…".
-  if (sqlStore && Array.isArray(changedRecords) && changedRecords.length > 0) {
+  if (sqlStore && typeof sqlStore.saveRecords === 'function' && Array.isArray(changedRecords) && changedRecords.length > 0) {
     pendingWrite = pendingWrite
       .catch(() => {})
       .then(() => sqlStore.saveRecords(changedRecords, state._updatedAt));
@@ -686,6 +687,14 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
   }
   if (!items.length) return res.status(400).json({ error: 'order_items_required' });
 
+  // Idempotency: mobile networks can lose a response after SQL succeeded.
+  // Retrying with the same requestId returns the original order, never a duplicate.
+  const requestId = String(body.requestId || '').slice(0, 120);
+  if (requestId) {
+    const previous = collection('hebli_orders').find((o) => o.clientRequestId === requestId);
+    if (previous) return res.json({ data: publicOrder(previous), updatedAt: state._updatedAt || 0, replayed: true });
+  }
+
   // Do not permit another customer device to overwrite an active table.
   const conflict = collection('hebli_orders').find(
     (o) => Number(o.tableNumber) === tableNumber && ACTIVE_ORDER_STATUSES.has(o.status),
@@ -725,12 +734,14 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
   // Optional loyalty member: server creates/finds it (client never writes loyalty
   // balances directly). Normalized id keeps future visits attached to one person.
   let loyaltyId;
+  let loyaltyCreated = false;
   const loyaltyName = String(body.loyaltyName || '').trim().slice(0, 120);
   if (loyaltyName) {
     loyaltyId = `loy-${loyaltyName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')}`;
     const members = collection('hebli_loyalty');
     if (!members.some((m) => m.id === loyaltyId)) {
       members.push({ id: loyaltyId, name: loyaltyName, points: 0, totalSpent: 0, visits: 0, tier: 'Silver', createdAt: now, updatedAt: now });
+      loyaltyCreated = true;
     }
   }
 
@@ -743,6 +754,7 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
     note: body.note ? String(body.note).slice(0, 500) : undefined,
     tableNumber,
     loyaltyId,
+    clientRequestId: requestId || undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -760,8 +772,18 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
     const member = collection('hebli_loyalty').find((m) => m.id === loyaltyId);
     if (member) changed.push({ collection: 'hebli_loyalty', data: member });
   }
-  const updatedAt = await commitState('order.created', { orderId: order.id, tableNumber, status: order.status }, 'all', changed);
-  res.status(201).json({ data: publicOrder(order), updatedAt });
+  try {
+    const updatedAt = await commitState('order.created', { orderId: order.id, tableNumber, status: order.status }, 'all', changed);
+    res.status(201).json({ data: publicOrder(order), updatedAt });
+  } catch (error) {
+    // SQL transaction did not commit: remove optimistic in-memory changes so
+    // a retry cannot create a ghost/duplicate order.
+    state.hebli_orders = collection('hebli_orders').filter((item) => item.id !== order.id);
+    state.hebli_audit_logs = collection('hebli_audit_logs').filter((item) => item.id !== audit.id);
+    state.hebli_notifications = collection('hebli_notifications').filter((item) => item.id !== baristaNotification.id && item.id !== waiterNotification.id);
+    if (loyaltyCreated) state.hebli_loyalty = collection('hebli_loyalty').filter((item) => item.id !== loyaltyId);
+    throw error;
+  }
 });
 
 app.patch('/api/v2/orders/:id', requireAuth(['Barista', 'Administrator']), async (req, res) => {
@@ -1038,6 +1060,17 @@ app.post('/api/state', async (req, res) => {
   // working while they are migrated screen by screen.
   const updatedAt = await commitState('state.updated', {}, 'all');
   res.json({ ok: true, _updatedAt: updatedAt });
+});
+
+// API error boundary — never send an HTML error page to the mobile checkout.
+// The client receives JSON and can show a retry message instead of remaining stuck.
+app.use((error, _req, res, _next) => {
+  console.error('API error:', error?.message || error);
+  if (res.headersSent) return;
+  const timeout = /timeout|ETIMEDOUT|ECONNRESET/i.test(String(error?.message || error));
+  res.status(timeout ? 503 : 500).json({
+    error: timeout ? 'database_temporarily_unavailable' : 'server_write_failed',
+  });
 });
 
 // ============================================================

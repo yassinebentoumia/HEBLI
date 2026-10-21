@@ -30,7 +30,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // A checkout must never spin forever. If the network/server is unavailable,
   // return a clear timeout error so the customer can retry.
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 12_000);
+  // First Neon write after idle can wake compute. Give an order up to 45s while
+  // keeping normal reads responsive; it is idempotent, so retry is safe.
+  const isOrderWrite = path === '/api/v2/orders' && String(init.method || 'GET').toUpperCase() === 'POST';
+  const timeout = window.setTimeout(() => controller.abort(), isOrderWrite ? 45_000 : 20_000);
   let res: Response;
   try {
     res = await fetch(path, {
@@ -86,6 +89,7 @@ export interface CreateOrderInput {
   note?: string;
   loyaltyName?: string;
   allowAddToExisting?: boolean;
+  requestId?: string; // idempotency key: retry returns same order, never duplicate
 }
 export const createV2Order = (input: CreateOrderInput) => request<ApiEnvelope<Order>>('/api/v2/orders', {
   method: 'POST', body: JSON.stringify(input),

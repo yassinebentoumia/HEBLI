@@ -29,6 +29,7 @@ export default function Menu() {
   const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
   const [orderError, setOrderError] = useState('');
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [orderTakingLong, setOrderTakingLong] = useState(false);
   // Keep the checkout compact on desktop/tablets: optional note/VIP fields are
   // expandable, while the Confirm button stays visible at all times.
   const [checkoutOptionsOpen, setCheckoutOptionsOpen] = useState(false);
@@ -47,6 +48,8 @@ export default function Menu() {
   // Supplement chooser
   const [suppProduct, setSuppProduct] = useState<Product | null>(null);
   const [chosenSupps, setChosenSupps] = useState<Supplement[]>([]);
+  // Persisted through a retry so a slow phone response never creates duplicate orders.
+  const pendingRequestId = useRef<string | null>(null);
 
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
@@ -150,6 +153,14 @@ export default function Menu() {
     if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT || !cart.length) return;
     setOrderError('');
     setSubmittingOrder(true);
+    setOrderTakingLong(false);
+    const slowTimer = window.setTimeout(() => setOrderTakingLong(true), 6_000);
+    // Same key is reused after timeout/retry: server returns existing order.
+    if (!pendingRequestId.current) {
+      pendingRequestId.current = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
     try {
       const response = await createV2Order({
         tableNumber,
@@ -157,6 +168,7 @@ export default function Menu() {
         clientName: `Table ${tableNumber}`,
         note: orderNote.trim() || undefined,
         loyaltyName: loyaltyName.trim() || undefined,
+        requestId: pendingRequestId.current,
         // The device that previously ordered for this table may add more items.
         allowAddToExisting: myTable === tableNumber,
       });
@@ -170,6 +182,7 @@ export default function Menu() {
       setOrderNote('');
       setLoyaltyName('');
       setOrderPlaced(true);
+      pendingRequestId.current = null;
       setCart([]);
       setSelectedTable(null);
       void refreshTables();
@@ -179,6 +192,8 @@ export default function Menu() {
       else if (error?.code === 'request_timeout' || error?.code === 'network_error' || error?.code === 'request_failed') setOrderError('Le serveur ne répond pas. Vérifiez votre connexion puis réessayez.');
       else setOrderError('La commande n’a pas été envoyée. Réessayez.');
     } finally {
+      window.clearTimeout(slowTimer);
+      setOrderTakingLong(false);
       setSubmittingOrder(false);
     }
   };
@@ -547,7 +562,7 @@ export default function Menu() {
                                 key={num}
                                 type="button"
                                 disabled={locked}
-                                onClick={() => { setSelectedTable(num); setOrderError(''); }}
+                                onClick={() => { setSelectedTable(num); setOrderError(''); pendingRequestId.current = null; }}
                                 className={`relative flex aspect-[1.15] flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
                                   locked
                                     ? 'border-white/[0.04] bg-white/[0.01] text-white/15 cursor-not-allowed'
@@ -602,7 +617,9 @@ export default function Menu() {
                       className="w-full rounded-2xl bg-[#D4AF37] py-3.5 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(212,175,55,0.6)]"
                     >
                       {submittingOrder
-                        ? 'Envoi de la commande…'
+                        ? orderTakingLong
+                          ? 'Connexion sécurisée au serveur…'
+                          : 'Envoi de la commande…'
                         : selectedTable
                         ? `${t('cart.placeOrder')} · Table ${selectedTable} · ${formatMoney(total)}`
                         : `${t('cart.chooseTable')} · ${formatMoney(total)}`}

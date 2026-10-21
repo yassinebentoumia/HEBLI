@@ -44,19 +44,27 @@ export const TOMBSTONE_KEY = 'hebli_tombstones';
  */
 export class PostgresStateStore {
   constructor(connectionString) {
+    const local = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+    // pg's current warning recommends explicit verify-full. Neon issues a valid
+    // certificate, and this removes the noisy sslmode=require warning on Render.
+    const normalizedUrl = local
+      ? connectionString
+      : connectionString.includes('sslmode=')
+      ? connectionString.replace(/sslmode=(require|prefer|verify-ca)/, 'sslmode=verify-full')
+      : `${connectionString}${connectionString.includes('?') ? '&' : '?'}sslmode=verify-full`;
+
     this.pool = new Pool({
-      connectionString,
-      ssl: connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
-        ? false
-        : { rejectUnauthorized: false },
-      // Render app has a small number of writes; don't open a huge connection pool.
-      max: 5,
-      idleTimeoutMillis: 20_000,
-      // Neon Free can take a little time to wake from scale-to-zero. Do NOT use
-      // an 8-second global query timeout here: it can kill the entire Render
-      // startup before Neon wakes. Checkout has its own browser-side timeout.
-      connectionTimeoutMillis: 30_000,
+      connectionString: normalizedUrl,
+      // Render Free + Neon pooled endpoint: small pool prevents connection bursts.
+      max: 3,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 35_000,
+      query_timeout: 35_000,
+      keepAlive: true,
+      keepAliveInitialDelayMillis: 10_000,
     });
+    // Never let an idle pooled-connection error crash the Node process.
+    this.pool.on('error', (error) => console.error('PostgreSQL idle connection error:', error?.message || error));
   }
 
   async init() {
@@ -205,6 +213,21 @@ export class PostgresStateStore {
    * invoices on every order. This is what keeps checkout fast at real café scale.
    */
   async saveRecords(records, updatedAt, meta = {}) {
+    // Neon Free may need a moment to wake. A transaction rollback makes this
+    // retry safe — no duplicate records are committed by a failed attempt.
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await this._saveRecords(records, updatedAt, meta);
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 900));
+      }
+    }
+    throw lastError;
+  }
+
+  async _saveRecords(records, updatedAt, meta = {}) {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
