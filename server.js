@@ -383,8 +383,266 @@ app.post('/api/ai', async (req, res) => {
 });
 
 // GET current shared state
+// Legacy compatibility endpoint. Phase 2 clients will progressively move to
+// /api/v2/* endpoints below, avoiding full-state downloads.
 app.get('/api/state', (_req, res) => {
   res.json(state);
+});
+
+// ============================================================
+// PHASE 2A — Lightweight Orders / Tables / Payments REST API
+// ============================================================
+// These routes sit alongside legacy /api/state while screens are migrated
+// gradually. They return only the data a screen needs, not the entire café.
+const TABLE_COUNT = Math.min(100, Math.max(1, Number(process.env.TABLE_COUNT || 27)));
+const ACTIVE_ORDER_STATUSES = new Set(['Pending', 'In Preparation', 'Ready']);
+const BARISTA_ORDER_STATUSES = new Set(['Pending', 'In Preparation', 'Ready']);
+const ORDER_STATUSES = new Set(['Pending', 'In Preparation', 'Ready', 'Paid', 'Cancelled']);
+
+function collection(key) {
+  if (!Array.isArray(state[key])) state[key] = [];
+  return state[key];
+}
+
+function nowIso() { return new Date().toISOString(); }
+function newId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
+
+async function commitState() {
+  state._updatedAt = Date.now();
+  // Persist before responding: SQL is the source of truth in production.
+  await persistNow();
+  return state._updatedAt;
+}
+
+function publicOrder(order) {
+  // Current app order shape is already safe for client/barista/waiter views.
+  // Keep this explicit so we can later remove sensitive fields by role.
+  return order;
+}
+
+function appendAudit(action, details, user = 'System') {
+  collection('hebli_audit_logs').push({
+    id: newId('log'), action, details, user, timestamp: nowIso(),
+  });
+}
+
+function appendNotification(target, title, body, type = 'info') {
+  collection('hebli_notifications').push({
+    id: newId('ntf'), target, title, body, type, read: false, createdAt: nowIso(),
+  });
+}
+
+// Optional Wi-Fi access on public (customer) endpoints only.
+function requireCafeAccess(req, res, next) {
+  if (!isAccessAllowed(req)) {
+    return res.status(403).json({ error: 'cafe_wifi_required' });
+  }
+  next();
+}
+
+// ----- Products (customer menu only receives active products) -----
+app.get('/api/v2/products', requireCafeAccess, (_req, res) => {
+  const products = collection('hebli_products').filter((p) => p?.active !== false);
+  res.json({ data: products, updatedAt: state._updatedAt || 0 });
+});
+
+// ----- Tables (computed from active / paid-but-not-freed orders) -----
+app.get('/api/v2/tables', requireCafeAccess, (_req, res) => {
+  const orders = collection('hebli_orders');
+  const map = new Map();
+  for (const order of orders) {
+    const number = Number(order?.tableNumber);
+    if (!number || number < 1 || number > TABLE_COUNT || order.status === 'Cancelled') continue;
+    const existing = map.get(number);
+    // Prefer an active order over a paid one for a table with multiple orders.
+    if (!existing || (ACTIVE_ORDER_STATUSES.has(order.status) && !ACTIVE_ORDER_STATUSES.has(existing.status))) {
+      map.set(number, order);
+    }
+  }
+  const tables = Array.from({ length: TABLE_COUNT }, (_, index) => {
+    const number = index + 1;
+    const order = map.get(number);
+    return {
+      number,
+      state: !order ? 'free' : order.status === 'Paid' ? 'paid' : 'occupied',
+      order: order ? publicOrder(order) : null,
+    };
+  });
+  res.json({ data: tables, updatedAt: state._updatedAt || 0 });
+});
+
+// ----- Orders -----
+app.get('/api/v2/orders', requireCafeAccess, (req, res) => {
+  const view = String(req.query.view || 'active'); // active | barista | all
+  const table = req.query.table ? Number(req.query.table) : null;
+  const status = req.query.status ? String(req.query.status) : null;
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
+
+  let orders = [...collection('hebli_orders')];
+  if (view === 'active') orders = orders.filter((o) => ACTIVE_ORDER_STATUSES.has(o.status));
+  if (view === 'barista') orders = orders.filter((o) => BARISTA_ORDER_STATUSES.has(o.status));
+  if (table) orders = orders.filter((o) => Number(o.tableNumber) === table);
+  if (status && ORDER_STATUSES.has(status)) orders = orders.filter((o) => o.status === status);
+
+  orders.sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime());
+  res.json({ data: orders.slice(0, limit).map(publicOrder), updatedAt: state._updatedAt || 0 });
+});
+
+app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
+  const body = req.body || {};
+  const tableNumber = Number(body.tableNumber);
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > TABLE_COUNT) {
+    return res.status(400).json({ error: 'invalid_table_number', maxTables: TABLE_COUNT });
+  }
+  if (!items.length) return res.status(400).json({ error: 'order_items_required' });
+
+  // Do not permit another customer device to overwrite an active table.
+  const conflict = collection('hebli_orders').find(
+    (o) => Number(o.tableNumber) === tableNumber && ACTIVE_ORDER_STATUSES.has(o.status),
+  );
+  if (conflict && !body.allowAddToExisting) {
+    return res.status(409).json({ error: 'table_occupied', tableNumber, orderId: conflict.id });
+  }
+
+  const safeItems = items
+    .filter((i) => i && typeof i === 'object' && i.productId && Number(i.quantity) > 0)
+    .map((i) => ({
+      productId: String(i.productId),
+      name: String(i.name || 'Product').slice(0, 180),
+      price: Math.max(0, Number(i.price) || 0),
+      quantity: Math.min(99, Math.max(1, Math.floor(Number(i.quantity)))),
+      image: String(i.image || ''),
+      supplements: Array.isArray(i.supplements) ? i.supplements : undefined,
+    }));
+  if (!safeItems.length) return res.status(400).json({ error: 'valid_order_items_required' });
+
+  const total = safeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const now = nowIso();
+  const order = {
+    id: newId('ORD'),
+    clientName: String(body.clientName || `Table ${tableNumber}`).slice(0, 120),
+    items: safeItems,
+    total: Math.round(total * 100) / 100,
+    status: 'Pending',
+    note: body.note ? String(body.note).slice(0, 500) : undefined,
+    tableNumber,
+    loyaltyId: body.loyaltyId ? String(body.loyaltyId) : undefined,
+    createdAt: now,
+    updatedAt: now,
+  };
+  collection('hebli_orders').push(order);
+  appendAudit('Order Placed', `Order ${order.id} for Table ${tableNumber} • ${order.total.toFixed(2)}`, order.clientName);
+  appendNotification('Barista', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
+  appendNotification('Cashier', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
+  const updatedAt = await commitState();
+  res.status(201).json({ data: publicOrder(order), updatedAt });
+});
+
+app.patch('/api/v2/orders/:id', async (req, res) => {
+  const order = collection('hebli_orders').find((o) => o.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'order_not_found' });
+  const body = req.body || {};
+
+  if (body.status !== undefined) {
+    if (!ORDER_STATUSES.has(body.status)) return res.status(400).json({ error: 'invalid_status' });
+    if (order.status === 'Cancelled' || order.status === 'Paid') {
+      return res.status(409).json({ error: 'order_is_final', status: order.status });
+    }
+    order.status = body.status;
+    if (body.status === 'Ready' && body.prepTimeSeconds !== undefined) {
+      order.prepTimeSeconds = Math.max(0, Math.floor(Number(body.prepTimeSeconds) || 0));
+    }
+  }
+  if (body.note !== undefined) order.note = String(body.note || '').slice(0, 500) || undefined;
+  if (body.tableNumber !== undefined) {
+    const n = Number(body.tableNumber);
+    if (!Number.isInteger(n) || n < 1 || n > TABLE_COUNT) return res.status(400).json({ error: 'invalid_table_number' });
+    order.tableNumber = n;
+  }
+  order.updatedAt = nowIso();
+  appendAudit('Order Updated', `Order ${order.id} → ${order.status}`, String(body.actor || 'Staff'));
+  const updatedAt = await commitState();
+  res.json({ data: publicOrder(order), updatedAt });
+});
+
+app.post('/api/v2/orders/:id/cancel', async (req, res) => {
+  const order = collection('hebli_orders').find((o) => o.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'order_not_found' });
+  if (order.status === 'Paid') return res.status(409).json({ error: 'paid_order_cannot_be_cancelled' });
+  if (order.status === 'Cancelled') return res.json({ data: publicOrder(order), updatedAt: state._updatedAt || 0 });
+
+  order.status = 'Cancelled';
+  order.tableNumber = undefined;
+  order.updatedAt = nowIso();
+  const reason = req.body?.reason ? ` — ${String(req.body.reason).slice(0, 200)}` : '';
+  appendAudit('Order Cancelled', `Order ${order.id} cancelled${reason}`, String(req.body?.actor || 'Owner'));
+  appendNotification('all', 'Commande annulée', `La commande ${order.id} a été annulée.${reason}`, 'info');
+  const updatedAt = await commitState();
+  res.json({ data: publicOrder(order), updatedAt });
+});
+
+// ----- Payments (atomic order status + payment record) -----
+app.get('/api/v2/payments', (req, res) => {
+  const date = req.query.date ? String(req.query.date) : null;
+  const limit = Math.min(500, Math.max(1, Number(req.query.limit || 100)));
+  let payments = [...collection('hebli_payments')];
+  if (date) payments = payments.filter((p) => p.date === date);
+  payments.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  res.json({ data: payments.slice(0, limit), updatedAt: state._updatedAt || 0 });
+});
+
+app.post('/api/v2/orders/:id/pay', async (req, res) => {
+  const order = collection('hebli_orders').find((o) => o.id === req.params.id);
+  if (!order) return res.status(404).json({ error: 'order_not_found' });
+  if (order.status === 'Cancelled') return res.status(409).json({ error: 'cancelled_order_cannot_be_paid' });
+  if (order.status === 'Paid') return res.status(409).json({ error: 'order_already_paid' });
+  if (order.status !== 'Ready') return res.status(409).json({ error: 'order_not_ready', status: order.status });
+
+  const now = new Date();
+  const payment = {
+    id: newId('PAY'), orderId: order.id, amount: order.total,
+    cashierName: String(req.body?.cashierName || 'Waiter').slice(0, 120),
+    date: now.toISOString().slice(0, 10),
+    time: now.toTimeString().slice(0, 8),
+    createdAt: now.toISOString(),
+  };
+  order.status = 'Paid';
+  order.updatedAt = now.toISOString();
+  collection('hebli_payments').push(payment);
+  appendAudit('Payment Received', `${order.total.toFixed(2)} paid for ${order.id}`, payment.cashierName);
+
+  // Loyalty points remain server-side/atomic (1 point per currency unit).
+  if (order.loyaltyId && !order.loyaltyAwarded) {
+    const member = collection('hebli_loyalty').find((m) => m.id === order.loyaltyId);
+    if (member) {
+      member.points = (Number(member.points) || 0) + Math.round(order.total);
+      member.totalSpent = (Number(member.totalSpent) || 0) + order.total;
+      member.visits = (Number(member.visits) || 0) + 1;
+      member.tier = member.points >= 2000 ? 'Black' : member.points >= 500 ? 'Gold' : 'Silver';
+      member.updatedAt = now.toISOString();
+      order.loyaltyAwarded = true;
+    }
+  }
+
+  const updatedAt = await commitState();
+  res.status(201).json({ data: { order: publicOrder(order), payment }, updatedAt });
+});
+
+app.post('/api/v2/tables/:number/free', async (req, res) => {
+  const number = Number(req.params.number);
+  if (!Number.isInteger(number) || number < 1 || number > TABLE_COUNT) {
+    return res.status(400).json({ error: 'invalid_table_number' });
+  }
+  const affected = collection('hebli_orders').filter((o) => Number(o.tableNumber) === number);
+  // Only paid/cancelled orders can be freed, never an active customer order.
+  if (affected.some((o) => ACTIVE_ORDER_STATUSES.has(o.status))) {
+    return res.status(409).json({ error: 'active_order_on_table' });
+  }
+  affected.forEach((o) => { o.tableNumber = undefined; o.updatedAt = nowIso(); });
+  appendAudit('Table Freed', `Table ${number} freed`, String(req.body?.actor || 'Waiter'));
+  const updatedAt = await commitState();
+  res.json({ data: { tableNumber: number, freedOrders: affected.map((o) => o.id) }, updatedAt });
 });
 
 // ============================================================
