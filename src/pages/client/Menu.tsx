@@ -28,6 +28,9 @@ export default function Menu() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
   const [orderError, setOrderError] = useState('');
+  // Keep the checkout compact on desktop/tablets: optional note/VIP fields are
+  // expandable, while the Confirm button stays visible at all times.
+  const [checkoutOptionsOpen, setCheckoutOptionsOpen] = useState(false);
   // The table this device is "using" (chosen earlier) — this client may keep
   // ordering for it even though it shows as occupied to everyone else.
   const [myTable, setMyTable] = useState<number | null>(() => {
@@ -545,30 +548,41 @@ export default function Menu() {
                 </div>
 
                 {cart.length > 0 && (
-                  <div className="p-6 border-t border-white/[0.04] space-y-4">
-                    <div className="flex justify-between items-center">
+                  /* Sticky checkout: Confirm always stays above the viewport/taskbar. */
+                  <div className="shrink-0 border-t border-white/[0.06] bg-[#0E1A16]/95 p-4 sm:p-5 backdrop-blur-xl space-y-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                    <div className="flex items-center justify-between">
                       <span className="text-white/40">{t('common.total')}</span>
-                      <span className="text-2xl font-bold">{formatMoney(total)}</span>
+                      <span className="text-2xl font-bold text-[#D4AF37]">{formatMoney(total)}</span>
                     </div>
-                    <div className="space-y-3">
-                      <div>
-                        <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-wider uppercase text-white/40">
+
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold tracking-wider uppercase text-white/40">
+                        <span className="flex items-center gap-2">
                           <Armchair className="h-3.5 w-3.5 text-[#D4AF37]" />
                           {t('cart.chooseTable')}
-                        </div>
-                        <div className="grid grid-cols-4 gap-2">
+                        </span>
+                        {selectedTable && (
+                          <span className="rounded-full bg-[#D4AF37]/15 px-2 py-0.5 text-[10px] text-[#D4AF37]">
+                            Table {selectedTable}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* 27 tables scroll inside this compact area — it cannot push
+                          the confirmation action outside the screen. */}
+                      <div className="max-h-[25vh] overflow-y-auto rounded-2xl border border-white/[0.06] bg-black/10 p-2 pr-1 scrollbar-hide">
+                        <div className="grid grid-cols-5 gap-2 pr-1">
                           {Array.from({ length: TABLE_COUNT }, (_, i) => i + 1).map((num) => {
                             const active = selectedTable === num;
                             const isMine = myTable === num;
-                            // A table is locked if it's occupied by SOMEONE ELSE.
                             const locked = occupiedTables.includes(num) && !isMine;
                             return (
                               <button
                                 key={num}
                                 type="button"
                                 disabled={locked}
-                                onClick={() => setSelectedTable(num)}
-                                className={`relative flex aspect-square flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
+                                onClick={() => { setSelectedTable(num); setOrderError(''); }}
+                                className={`relative flex aspect-[1.15] flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
                                   locked
                                     ? 'border-white/[0.04] bg-white/[0.01] text-white/15 cursor-not-allowed'
                                     : active
@@ -577,38 +591,51 @@ export default function Menu() {
                                 }`}
                                 title={locked ? `Table ${num} occupée` : isMine ? `Votre table ${num}` : `Table ${num}`}
                               >
-                                <Armchair className={`h-4 w-4 ${locked ? 'text-white/15' : active ? 'text-[#D4AF37]' : 'text-white/40'}`} />
+                                <Armchair className={`h-3.5 w-3.5 ${locked ? 'text-white/15' : active ? 'text-[#D4AF37]' : 'text-white/40'}`} />
                                 <span className="mt-0.5 text-sm font-bold">{num}</span>
-                                {isMine && !locked && (
-                                  <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#D4AF37]" />
-                                )}
+                                {isMine && !locked && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-[#D4AF37]" />}
                               </button>
                             );
                           })}
                         </div>
                       </div>
-                      <textarea
-                        placeholder={t('cart.notePlaceholder')}
-                        value={orderNote}
-                        onChange={e => setOrderNote(e.target.value)}
-                        rows={2}
-                        className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-3 px-4 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 resize-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder={t('cart.loyaltyOptional')}
-                        value={loyaltyName}
-                        onChange={e => setLoyaltyName(e.target.value)}
-                        className="w-full rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/[0.04] py-3 px-4 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#D4AF37]/50"
-                      />
                     </div>
+
+                    {/* Optional fields are collapsed by default to protect space. */}
+                    <button
+                      type="button"
+                      onClick={() => setCheckoutOptionsOpen((v) => !v)}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-white/45 hover:text-white/70"
+                    >
+                      <span>Note & VIP (optionnel)</span>
+                      <span className="text-[#D4AF37]">{checkoutOptionsOpen ? '−' : '+'}</span>
+                    </button>
+                    {checkoutOptionsOpen && (
+                      <div className="space-y-2">
+                        <textarea
+                          placeholder={t('cart.notePlaceholder')}
+                          value={orderNote}
+                          onChange={e => setOrderNote(e.target.value)}
+                          rows={2}
+                          className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2.5 px-3 text-sm text-white placeholder:text-white/15 outline-none focus:border-white/20 resize-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder={t('cart.loyaltyOptional')}
+                          value={loyaltyName}
+                          onChange={e => setLoyaltyName(e.target.value)}
+                          className="w-full rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/[0.04] py-2.5 px-3 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#D4AF37]/50"
+                        />
+                      </div>
+                    )}
+
                     {orderError && <p className="text-center text-xs text-red-400">{orderError}</p>}
                     <button
                       onClick={placeOrder}
                       disabled={!selectedTable}
-                      className="w-full rounded-2xl bg-[#D4AF37] py-4 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98]"
+                      className="w-full rounded-2xl bg-[#D4AF37] py-3.5 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(212,175,55,0.6)]"
                     >
-                      {t('cart.placeOrder')} • {formatMoney(total)}
+                      {selectedTable ? `${t('cart.placeOrder')} · Table ${selectedTable} · ${formatMoney(total)}` : `${t('cart.chooseTable')} · ${formatMoney(total)}`}
                     </button>
                   </div>
                 )}
