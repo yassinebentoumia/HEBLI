@@ -17,7 +17,7 @@ import {
   getActiveSessions,
 } from '@/utils/store';
 import { pullRemote, pushRemote, isOnline } from '@/utils/sync';
-import { getServerSession, loginServer, logoutServer } from '@/utils/api';
+import { getServerSession, loginServer, logoutServer, subscribePhase2Events } from '@/utils/api';
 
 interface AppContextType {
   user: Staff | null;
@@ -111,6 +111,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
+
+  // Phase 2 realtime bridge: every server event triggers one lightweight sync
+  // into the legacy local store. This keeps Track Order, Owner, support and any
+  // screen not yet fully migrated to V2 APIs live without a browser refresh.
+  // Staff uses the authenticated SSE scope; guests use the café-Wi-Fi scope.
+  useEffect(() => {
+    let syncing = false;
+    const onRealtimeEvent = async () => {
+      if (syncing) return;
+      syncing = true;
+      try {
+        await pullRemote();
+        setSyncStatus(isOnline() ? 'online' : 'offline');
+        // An SSE event is proof that state changed server-side. Force a local
+        // snapshot read even if a concurrent poll already consumed the change.
+        setOrders(getOrders());
+        setSyncTick((tick) => tick + 1);
+      } finally {
+        syncing = false;
+      }
+    };
+    return subscribePhase2Events(user ? 'staff' : 'client', onRealtimeEvent, () => {
+      // Native EventSource retries automatically; normal polling remains as a
+      // low-frequency safety net if an intermediary temporarily drops SSE.
+    });
+  }, [user]);
 
   const login = useCallback(async (pin: string) => {
     // Pull latest staff list first, then authenticate the PIN on the SERVER.

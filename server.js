@@ -622,6 +622,24 @@ app.get('/api/v2/tables', requireCafeAccess, (_req, res) => {
   res.json({ data: tables, updatedAt: state._updatedAt || 0 });
 });
 
+// ----- Public order tracking (customer's chosen table only) -----
+// Kept deliberately separate from staff orders: a guest never receives the
+// whole kitchen queue, invoices, payments, staff, or other tables' data.
+app.get('/api/v2/track/:tableNumber', requireCafeAccess, (req, res) => {
+  const tableNumber = Number(req.params.tableNumber);
+  if (!Number.isInteger(tableNumber) || tableNumber < 1 || tableNumber > TABLE_COUNT) {
+    return res.status(400).json({ error: 'invalid_table_number' });
+  }
+  const limit = Math.min(30, Math.max(1, Number(req.query.limit || 10)));
+  const requestedOrderId = req.query.orderId ? String(req.query.orderId) : null;
+  const orders = collection('hebli_orders')
+    .filter((o) => o.id === requestedOrderId || Number(o.tableNumber) === tableNumber || (o.clientName === `Table ${tableNumber}` && o.status === 'Cancelled'))
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .slice(0, limit)
+    .map(publicOrder);
+  res.json({ data: orders, updatedAt: state._updatedAt || 0 });
+});
+
 // ----- Orders -----
 app.get('/api/v2/orders', requireAuth(['Barista', 'Cashier', 'Administrator']), (req, res) => {
   const status = req.query.status ? String(req.query.status) : null;

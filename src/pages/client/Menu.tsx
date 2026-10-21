@@ -158,6 +158,7 @@ export default function Menu() {
       const order = response.data;
       localStorage.setItem('hebli_client_name', order.clientName);
       localStorage.setItem('hebli_client_table', String(tableNumber));
+      localStorage.setItem('hebli_last_order_id', order.id);
       setMyTable(tableNumber);
       setOrderId(order.id);
       setFinalTotal(order.total);

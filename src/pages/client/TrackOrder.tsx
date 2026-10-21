@@ -10,7 +10,8 @@ import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
 import type { TranslationKey } from '@/i18n/translations';
-import { getOrders, formatMoney} from '@/utils/store';
+import { getOrders, formatMoney } from '@/utils/store';
+import { getV2TrackingOrders, subscribePhase2Events } from '@/utils/api';
 import type { Order, OrderStatus } from '@/types';
 
 const statusSteps: { status: OrderStatus; icon: typeof Clock; labelKey: TranslationKey; descKey: TranslationKey }[] = [
@@ -35,49 +36,77 @@ export default function TrackOrder() {
   const [myOrders, setMyOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [inputName, setInputName] = useState('');
+  const [lastOrderId, setLastOrderId] = useState<string | null>(() => localStorage.getItem('hebli_last_order_id'));
+  const [trackedTable, setTrackedTable] = useState<number | null>(null);
+  const [trackError, setTrackError] = useState('');
 
-  const loadOrders = useCallback((name: string) => {
-    const all = getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    const mine = all.filter(o => o.clientName.toLowerCase() === name.toLowerCase());
-    setMyOrders(mine);
-  }, []);
+  // Read only this table's orders from the Phase 2 API. This is independent
+  // from the legacy full-state localStorage sync.
+  const loadOrders = useCallback(async (tableNumber: number, legacyName?: string, orderId?: string | null) => {
+    try {
+      const response = await getV2TrackingOrders(tableNumber, orderId || lastOrderId);
+      const mine = response.data;
+      setMyOrders(mine);
+      setSelectedOrder((current) => current ? (mine.find((o) => o.id === current.id) || current) : null);
+      setTrackError('');
+    } catch {
+      // During a rolling deployment, keep legacy orders as a visual fallback.
+      const all = getOrders().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const label = legacyName || `Table ${tableNumber}`;
+      const mine = all.filter((o) => o.clientName.toLowerCase() === label.toLowerCase());
+      setMyOrders(mine);
+      setSelectedOrder((current) => current ? (mine.find((o) => o.id === current.id) || current) : null);
+      if (!mine.length) setTrackError('Impossible de charger le suivi. Vérifiez votre connexion au Wi-Fi du café.');
+    }
+  }, [lastOrderId]);
 
   useEffect(() => {
+    const savedTable = Number(localStorage.getItem('hebli_client_table'));
     const savedName = localStorage.getItem('hebli_client_name');
-    if (savedName) {
-      setClientName(savedName);
-      setInputName(savedName);
-      loadOrders(savedName);
+    if (savedTable >= 1) {
+      setTrackedTable(savedTable);
+      setClientName(savedName || `Table ${savedTable}`);
+      setInputName(String(savedTable));
+      void loadOrders(savedTable, savedName || undefined);
     }
   }, [loadOrders]);
 
-  // Poll for updates
+  // SSE is immediate. A 15s table-only fallback handles a dropped mobile stream
+  // without refreshing the page or downloading the whole café state.
   useEffect(() => {
-    if (!clientName) return;
-    const interval = setInterval(() => {
-      loadOrders(clientName);
-      if (selectedOrder) {
-        const all = getOrders();
-        const updated = all.find(o => o.id === selectedOrder.id);
-        if (updated && updated.status !== selectedOrder.status) {
-          setSelectedOrder(updated);
-        }
-      }
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [clientName, selectedOrder, loadOrders]);
+    if (!trackedTable) return;
+    const refresh = () => { void loadOrders(trackedTable, clientName); };
+    const unsubscribe = subscribePhase2Events('client', refresh);
+    const fallback = setInterval(refresh, 15_000);
+    return () => { unsubscribe(); clearInterval(fallback); };
+  }, [trackedTable, clientName, loadOrders]);
 
   const handleFindOrders = () => {
-    if (!inputName.trim()) return;
-    localStorage.setItem('hebli_client_name', inputName.trim());
-    setClientName(inputName.trim());
-    loadOrders(inputName.trim());
+    const tableNumber = Number(inputName.trim().replace(/^table\s*/i, ''));
+    if (!Number.isInteger(tableNumber) || tableNumber < 1) {
+      setTrackError('Entrez le numéro de votre table.');
+      return;
+    }
+    const label = `Table ${tableNumber}`;
+    localStorage.setItem('hebli_client_name', label);
+    localStorage.setItem('hebli_client_table', String(tableNumber));
+    localStorage.removeItem('hebli_last_order_id');
+    setLastOrderId(null);
+    setClientName(label);
+    setTrackedTable(tableNumber);
+    setTrackError('');
+    void loadOrders(tableNumber, label, null);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('hebli_client_name');
+    localStorage.removeItem('hebli_client_table');
+    localStorage.removeItem('hebli_last_order_id');
     setClientName('');
     setInputName('');
+    setLastOrderId(null);
+    setTrackedTable(null);
+    setTrackError('');
     setMyOrders([]);
     setSelectedOrder(null);
   };
@@ -103,17 +132,20 @@ export default function TrackOrder() {
             <User className="h-8 w-8 text-[#D4AF37]" />
           </div>
           <h2 className="text-2xl font-bold">{t('track.welcome')}</h2>
-          <p className="mt-2 text-white/40">{t('track.enterName')}</p>
+          <p className="mt-2 text-white/40">Entrez le numéro de votre table pour suivre vos commandes.</p>
 
           <GlassCard className="mt-8">
             <input
-              type="text"
-              placeholder={t('cart.yourName')}
+              type="number"
+              inputMode="numeric"
+              min="1"
+              placeholder={t('cart.tableNumber')}
               value={inputName}
-              onChange={(e) => setInputName(e.target.value)}
+              onChange={(e) => { setInputName(e.target.value); setTrackError(''); }}
               onKeyDown={(e) => e.key === 'Enter' && handleFindOrders()}
               className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-white/20 outline-none focus:border-[#D4AF37]/50 transition-colors mb-4"
             />
+            {trackError && <p className="mb-3 text-xs text-red-400">{trackError}</p>}
             <button
               onClick={handleFindOrders}
               className="w-full rounded-xl bg-[#D4AF37] py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors"

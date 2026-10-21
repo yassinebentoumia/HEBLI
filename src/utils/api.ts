@@ -58,6 +58,8 @@ export const logoutServer = () => request<{ ok: true }>('/api/v2/auth/logout', {
 export const getV2Products = () => request<ApiEnvelope<Product[]>>('/api/v2/products');
 export const getV2Categories = () => request<ApiEnvelope<Category[]>>('/api/v2/categories');
 export const getV2Tables = () => request<ApiEnvelope<TableSnapshot[]>>('/api/v2/tables');
+export const getV2TrackingOrders = (tableNumber: number, orderId?: string | null) =>
+  request<ApiEnvelope<Order[]>>(`/api/v2/track/${tableNumber}${orderId ? `?orderId=${encodeURIComponent(orderId)}` : ''}`);
 
 export interface CreateOrderInput {
   tableNumber: number;
