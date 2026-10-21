@@ -112,6 +112,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Immediately clear stale local UI state when a server-authenticated request
+  // returns 401 (typically an old PWA session after a deploy).
+  useEffect(() => {
+    const expired = () => { logout(); setUser(null); };
+    window.addEventListener('hebli-auth-expired', expired);
+    return () => window.removeEventListener('hebli-auth-expired', expired);
+  }, []);
+
   // Phase 2 realtime bridge: every server event triggers one lightweight sync
   // into the legacy local store. This keeps Track Order, Owner, support and any
   // screen not yet fully migrated to V2 APIs live without a browser refresh.

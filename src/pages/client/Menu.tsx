@@ -28,6 +28,7 @@ export default function Menu() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
   const [orderError, setOrderError] = useState('');
+  const [submittingOrder, setSubmittingOrder] = useState(false);
   // Keep the checkout compact on desktop/tablets: optional note/VIP fields are
   // expandable, while the Confirm button stays visible at all times.
   const [checkoutOptionsOpen, setCheckoutOptionsOpen] = useState(false);
@@ -148,6 +149,7 @@ export default function Menu() {
     const tableNumber = selectedTable;
     if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT || !cart.length) return;
     setOrderError('');
+    setSubmittingOrder(true);
     try {
       const response = await createV2Order({
         tableNumber,
@@ -174,52 +176,12 @@ export default function Menu() {
     } catch (error: any) {
       if (error?.code === 'table_occupied') setOrderError('Cette table est déjà occupée. Veuillez choisir une autre table.');
       else if (error?.code === 'cafe_wifi_required') setOrderError('Connectez-vous au Wi-Fi du café pour commander.');
+      else if (error?.code === 'request_failed') setOrderError('Le serveur ne répond pas. Vérifiez votre connexion puis réessayez.');
       else setOrderError('La commande n’a pas été envoyée. Réessayez.');
+    } finally {
+      setSubmittingOrder(false);
     }
   };
-
-  if (orderPlaced) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B1512] px-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
-            className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10"
-          >
-            <Check className="h-10 w-10 text-green-400" />
-          </motion.div>
-          <h2 className="text-3xl font-bold text-white">{t('order.confirmed')}</h2>
-          <p className="mt-2 text-white/50">{t('order.confirmedHint')}</p>
-          <GlassCard className="mt-6 mx-auto max-w-sm">
-            <div className="text-sm text-white/40">{t('order.orderId')}</div>
-            <div className="mt-1 text-2xl font-bold text-[#D4AF37] tracking-wider">{orderId}</div>
-            <div className="mt-4 text-sm text-white/40">{t('common.total')}</div>
-            <div className="text-xl font-bold text-white">{formatMoney(finalTotal)}</div>
-          </GlassCard>
-          <div className="mt-8 flex gap-4 justify-center">
-            <button
-              onClick={() => setOrderPlaced(false)}
-              className="rounded-xl border border-white/10 px-6 py-3 text-sm font-medium text-white/70 hover:text-white hover:border-white/20 transition-all"
-            >
-              {t('order.orderMore')}
-            </button>
-            <button
-              onClick={() => navigate(`/client/track?order=${orderId}`)}
-              className="rounded-xl bg-[#D4AF37] px-6 py-3 text-sm font-bold text-black hover:bg-amber-400 transition-all"
-            >
-              {t('order.trackOrder')}
-            </button>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#0B1512] text-white overflow-x-hidden">
@@ -636,10 +598,14 @@ export default function Menu() {
                     {orderError && <p className="text-center text-xs text-red-400">{orderError}</p>}
                     <button
                       onClick={placeOrder}
-                      disabled={!selectedTable}
+                      disabled={!selectedTable || submittingOrder}
                       className="w-full rounded-2xl bg-[#D4AF37] py-3.5 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(212,175,55,0.6)]"
                     >
-                      {selectedTable ? `${t('cart.placeOrder')} · Table ${selectedTable} · ${formatMoney(total)}` : `${t('cart.chooseTable')} · ${formatMoney(total)}`}
+                      {submittingOrder
+                        ? 'Envoi de la commande…'
+                        : selectedTable
+                        ? `${t('cart.placeOrder')} · Table ${selectedTable} · ${formatMoney(total)}`
+                        : `${t('cart.chooseTable')} · ${formatMoney(total)}`}
                     </button>
                   </div>
                 )}
@@ -699,6 +665,65 @@ export default function Menu() {
                   <ShoppingCart className="h-4 w-4" />
                   Ajouter · {formatMoney(suppProduct.price + chosenSupps.reduce((a, s) => a + s.price, 0))}
                 </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ============================================================
+          ORDER CONFIRMATION — always shown immediately after server success
+         ============================================================ */}
+      <AnimatePresence>
+        {orderPlaced && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[10020] bg-black/75 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 18 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 12 }}
+              transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+              className="fixed left-1/2 top-1/2 z-[10021] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-[#D4AF37]/30 bg-[#0E1A16] shadow-[0_30px_100px_-20px_rgba(0,0,0,0.9)]"
+            >
+              <div className="relative px-6 pt-8 pb-6 text-center">
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-[#D4AF37]/12 to-transparent" />
+                <motion.div
+                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                  transition={{ delay: 0.12, type: 'spring', stiffness: 240 }}
+                  className="relative mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-green-400/30 bg-green-500/10 shadow-[0_0_35px_rgba(74,222,128,0.15)]"
+                >
+                  <Check className="h-10 w-10 text-green-400" />
+                </motion.div>
+                <h2 className="relative text-2xl font-bold text-white">{t('order.confirmed')}</h2>
+                <p className="relative mt-2 text-sm text-white/50">{t('order.confirmedHint')}</p>
+
+                <div className="relative mt-6 rounded-2xl border border-white/[0.07] bg-black/20 p-4">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/35">{t('order.orderId')}</div>
+                  <div className="mt-1 text-2xl font-bold tracking-wider text-[#D4AF37]">{orderId}</div>
+                  <div className="mt-4 flex items-center justify-between border-t border-white/[0.06] pt-3 text-sm">
+                    <span className="text-white/40">{t('common.total')}</span>
+                    <span className="font-bold text-white">{formatMoney(finalTotal)}</span>
+                  </div>
+                </div>
+
+                <p className="relative mt-4 text-xs text-white/35">Suivez votre commande en temps réel, sans actualiser la page.</p>
+                <div className="relative mt-6 grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setOrderPlaced(false)}
+                    className="rounded-xl border border-white/10 py-3 text-sm font-semibold text-white/70 hover:bg-white/[0.05] hover:text-white transition-colors"
+                  >
+                    {t('order.orderMore')}
+                  </button>
+                  <button
+                    onClick={() => navigate(`/client/track?order=${encodeURIComponent(orderId)}`)}
+                    className="rounded-xl bg-[#D4AF37] py-3 text-sm font-bold text-black hover:bg-amber-400 transition-colors active:scale-[0.98]"
+                  >
+                    {t('order.trackOrder')}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>

@@ -19,14 +19,19 @@ export default function RequireAuth({ children, role }: Props) {
 
   useEffect(() => {
     let alive = true;
-    getServerSession()
-      .then((session) => {
-        if (!alive) return;
-        const ok = !role || session.data.role === role;
-        setState(ok ? 'allowed' : 'denied');
-      })
-      .catch(() => { if (alive) setState('denied'); });
-    return () => { alive = false; };
+    const verify = () => {
+      getServerSession()
+        .then((session) => {
+          if (!alive) return;
+          const ok = !role || session.data.role === role;
+          setState(ok ? 'allowed' : 'denied');
+        })
+        .catch(() => { if (alive) setState('denied'); });
+    };
+    verify();
+    const expired = () => { if (alive) setState('denied'); };
+    window.addEventListener('hebli-auth-expired', expired);
+    return () => { alive = false; window.removeEventListener('hebli-auth-expired', expired); };
   }, [role]);
 
   if (state === 'checking') {

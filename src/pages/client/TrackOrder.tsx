@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle2, Circle, Timer, CreditCard, PackageOpen, User, Coffee, LogOut } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
@@ -31,6 +31,7 @@ const statusColor: Record<OrderStatus, string> = {
 
 export default function TrackOrder() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t } = useT();
   const [clientName, setClientName] = useState('');
   const [myOrders, setMyOrders] = useState<Order[]>([]);
@@ -47,7 +48,8 @@ export default function TrackOrder() {
       const response = await getV2TrackingOrders(tableNumber, orderId || lastOrderId);
       const mine = response.data;
       setMyOrders(mine);
-      setSelectedOrder((current) => current ? (mine.find((o) => o.id === current.id) || current) : null);
+      const directId = orderId || lastOrderId;
+      setSelectedOrder((current) => current ? (mine.find((o) => o.id === current.id) || current) : (directId ? mine.find((o) => o.id === directId) || null : null));
       setTrackError('');
     } catch {
       // During a rolling deployment, keep legacy orders as a visual fallback.
@@ -63,13 +65,18 @@ export default function TrackOrder() {
   useEffect(() => {
     const savedTable = Number(localStorage.getItem('hebli_client_table'));
     const savedName = localStorage.getItem('hebli_client_name');
+    const linkedOrderId = new URLSearchParams(location.search).get('order');
+    if (linkedOrderId) {
+      localStorage.setItem('hebli_last_order_id', linkedOrderId);
+      setLastOrderId(linkedOrderId);
+    }
     if (savedTable >= 1) {
       setTrackedTable(savedTable);
       setClientName(savedName || `Table ${savedTable}`);
       setInputName(String(savedTable));
-      void loadOrders(savedTable, savedName || undefined);
+      void loadOrders(savedTable, savedName || undefined, linkedOrderId);
     }
-  }, [loadOrders]);
+  }, [loadOrders, location.search]);
 
   // SSE is immediate. A compact 4s table-only fallback guarantees tracking
   // updates without manual refresh when mobile/PWA SSE is briefly interrupted.

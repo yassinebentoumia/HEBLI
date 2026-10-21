@@ -35,6 +35,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!res.ok) {
     let code = 'request_failed';
     try { code = (await res.json()).error || code; } catch { /* ignore */ }
+    // Let route guards/context react immediately if an old PWA/browser session
+    // has expired after a deployment — never leave a silent frozen dashboard.
+    if (res.status === 401 && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('hebli-auth-expired'));
+    }
     throw new ApiError(res.status, code);
   }
   return res.json() as Promise<T>;
