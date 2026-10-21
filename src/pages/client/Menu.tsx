@@ -2,7 +2,7 @@
 // HEBLI – Client Menu Ordering Page (Redesigned)
 // ============================================================
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import {
   ShoppingCart, Plus, Minus, Trash2, ArrowLeft, Search, Check, Coffee, X, Sparkles, ChevronRight, Armchair,
@@ -11,15 +11,14 @@ import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
-import { useApp } from '@/contexts/AppContext';
-import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT, upsertLoyaltyMember, formatMoney} from '@/utils/store';
+import { getActiveProducts, getCategories, TABLE_COUNT, formatMoney } from '@/utils/store';
+import { getV2Products, getV2Categories, getV2Tables, createV2Order, subscribePhase2Events } from '@/utils/api';
 import CategoryIcon from '@/components/CategoryIcon';
 import type { Product, CartItem, Category, Supplement } from '@/types';
 
 export default function Menu() {
   const navigate = useNavigate();
   const { t } = useT();
-  const { syncTick } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -28,6 +27,7 @@ export default function Menu() {
   const [cartOpen, setCartOpen] = useState(false);
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
+  const [orderError, setOrderError] = useState('');
   // The table this device is "using" (chosen earlier) — this client may keep
   // ordering for it even though it shows as occupied to everyone else.
   const [myTable, setMyTable] = useState<number | null>(() => {
@@ -49,23 +49,38 @@ export default function Menu() {
   const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '50%']);
   const heroOpacity = useTransform(scrollYProgress, [0, 1], [1, 0]);
 
+  // Phase 2: load only public menu data, not the full café snapshot.
   useEffect(() => {
-    setProducts(getActiveProducts());
-    setCategories(getCategories());
+    let alive = true;
+    Promise.all([getV2Products(), getV2Categories()])
+      .then(([productRes, categoryRes]) => {
+        if (!alive) return;
+        setProducts(productRes.data);
+        setCategories(categoryRes.data);
+      })
+      .catch(() => {
+        // Compatibility fallback while a deployment is rolling out.
+        if (!alive) return;
+        setProducts(getActiveProducts());
+        setCategories(getCategories());
+      });
+    return () => { alive = false; };
   }, []);
 
-  // Track which tables are currently taken (any active, unpaid order with a table).
-  // Driven by the central sync signal (syncTick) — refreshes only when the shared
-  // data actually changes, and only while the checkout drawer is open (when the
-  // client is actually choosing a table). No blind timer / auto-refresh.
+  const refreshTables = useCallback(async () => {
+    try {
+      const response = await getV2Tables();
+      setOccupiedTables(response.data.filter((table) => table.state !== 'free').map((table) => table.number));
+    } catch { /* UI keeps last known table state */ }
+  }, []);
+
+  // Only subscribe while the client is choosing a table. SSE sends a tiny event;
+  // we then refetch only /api/v2/tables (not orders/invoices/staff/logs).
   useEffect(() => {
     if (!cartOpen) return;
-    const taken = new Set<number>();
-    getOrders().forEach((o) => {
-      if (o.tableNumber && o.status !== 'Paid') taken.add(o.tableNumber);
-    });
-    setOccupiedTables(Array.from(taken));
-  }, [cartOpen, syncTick]);
+    void refreshTables();
+    return subscribePhase2Events('client', () => { void refreshTables(); });
+  }, [cartOpen, refreshTables]);
 
   const filtered = products.filter((p) => {
     const catMatch = activeCategory === 'All' || p.category === activeCategory;
@@ -123,62 +138,37 @@ export default function Menu() {
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const placeOrder = () => {
+  const placeOrder = async () => {
     const tableNumber = selectedTable;
-    if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT) return;
-    const id = 'ORD-' + String(Date.now()).slice(-6);
-    // Optional loyalty: if the client entered a name/phone, attach a member id
-    // so points are awarded when this order is paid.
-    const loyaltyId = loyaltyName.trim() ? upsertLoyaltyMember(loyaltyName.trim()) : undefined;
-    const order = {
-      id,
-      clientName: `Table ${tableNumber}`,
-      items: [...cart],
-      total,
-      status: 'Pending' as const,
-      note: orderNote.trim() || undefined,
-      tableNumber,
-      loyaltyId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    addOrder(order);
-    addAuditLog({
-      id: 'log-' + Date.now(),
-      action: 'Order Placed',
-      details: `Order ${id} for ${order.clientName} • ${formatMoney(total)}`,
-      user: order.clientName,
-      timestamp: new Date().toISOString(),
-    });
-    // Notify barista AND cashier of the new order
-    addNotification({
-      id: 'ntf-' + Date.now() + '-b',
-      target: 'Barista',
-      title: 'New Order',
-      body: `${id} • ${order.clientName} • ${formatMoney(total)}`,
-      type: 'order',
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
-    addNotification({
-      id: 'ntf-' + Date.now() + '-c',
-      target: 'Cashier',
-      title: 'New Order',
-      body: `${id} • ${order.clientName} • ${formatMoney(total)}`,
-      type: 'order',
-      read: false,
-      createdAt: new Date().toISOString(),
-    });
-    localStorage.setItem('hebli_client_name', order.clientName);
-    localStorage.setItem('hebli_client_table', String(tableNumber));
-    setMyTable(tableNumber);
-    setOrderId(id);
-    setFinalTotal(total);
-    setOrderNote('');
-    setLoyaltyName('');
-    setOrderPlaced(true);
-    setCart([]);
-    setSelectedTable(null);
+    if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT || !cart.length) return;
+    setOrderError('');
+    try {
+      const response = await createV2Order({
+        tableNumber,
+        items: cart,
+        clientName: `Table ${tableNumber}`,
+        note: orderNote.trim() || undefined,
+        loyaltyName: loyaltyName.trim() || undefined,
+        // The device that previously ordered for this table may add more items.
+        allowAddToExisting: myTable === tableNumber,
+      });
+      const order = response.data;
+      localStorage.setItem('hebli_client_name', order.clientName);
+      localStorage.setItem('hebli_client_table', String(tableNumber));
+      setMyTable(tableNumber);
+      setOrderId(order.id);
+      setFinalTotal(order.total);
+      setOrderNote('');
+      setLoyaltyName('');
+      setOrderPlaced(true);
+      setCart([]);
+      setSelectedTable(null);
+      void refreshTables();
+    } catch (error: any) {
+      if (error?.code === 'table_occupied') setOrderError('Cette table est déjà occupée. Veuillez choisir une autre table.');
+      else if (error?.code === 'cafe_wifi_required') setOrderError('Connectez-vous au Wi-Fi du café pour commander.');
+      else setOrderError('La commande n’a pas été envoyée. Réessayez.');
+    }
   };
 
   if (orderPlaced) {
@@ -612,6 +602,7 @@ export default function Menu() {
                         className="w-full rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/[0.04] py-3 px-4 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#D4AF37]/50"
                       />
                     </div>
+                    {orderError && <p className="text-center text-xs text-red-400">{orderError}</p>}
                     <button
                       onClick={placeOrder}
                       disabled={!selectedTable}

@@ -22,7 +22,7 @@ export default function StaffLogin() {
     setError('');
     setLoading(true);
     try {
-      const staff = await (login(pin) as unknown as Promise<typeof login extends (...args: any) => infer R ? R : never> | any);
+      const staff = await login(pin);
       setLoading(false);
       if (!staff) {
         setError('Invalid PIN. Please try again.');

@@ -27,7 +27,8 @@ import ChatPanel from '@/components/ChatPanel';
 import MySchedule from '@/components/MySchedule';
 import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
-import { getOrders, updateOrderStatus, addAuditLog, getPayments, formatMoney} from '@/utils/store';
+import { formatMoney } from '@/utils/store';
+import { getV2Orders, updateV2Order, subscribePhase2Events } from '@/utils/api';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order } from '@/types';
 
@@ -105,7 +106,7 @@ function LiveTimer({ startTime }: { startTime: string }) {
 
 export default function BaristaDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser, refreshOrders, syncTick } = useApp();
+  const { user, logoutUser } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
@@ -126,66 +127,43 @@ export default function BaristaDashboard() {
     );
   };
 
-  const loadOrders = useCallback(() => {
-    const all = getOrders();
-    // Barista sees Pending, In Preparation, Ready (unpaid), AND Paid (completed today)
-    const relevant = all.filter(
-      (o) => o.status === 'Pending' || o.status === 'In Preparation' || o.status === 'Ready' || o.status === 'Paid'
-    );
-    // Sort: oldest order first (longest waiting time at the top — most urgent)
-    setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+  const loadOrders = useCallback(async () => {
+    try {
+      // Kitchen queue + today's paid completions: small role-scoped API calls.
+      const today = new Date().toISOString().split('T')[0];
+      const [kitchen, paid] = await Promise.all([
+        getV2Orders({ view: 'barista', limit: 200 }),
+        getV2Orders({ status: 'Paid', limit: 200 }),
+      ]);
+      const paidToday = paid.data.filter((o) => new Date(o.updatedAt || o.createdAt).toISOString().split('T')[0] === today);
+      const relevant = [...kitchen.data, ...paidToday];
+      setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
 
-    const pendingCount = relevant.filter((o) => o.status === 'Pending').length;
-    if (initializedRef.current && pendingCount > prevPendingRef.current) {
-      setNotification(`🔔 Nouvelle commande! (${pendingCount} en attente)`);
-      if (soundOn) playBeep();
-      setTimeout(() => setNotification(null), 4500);
+      const pendingCount = kitchen.data.filter((o) => o.status === 'Pending').length;
+      if (initializedRef.current && pendingCount > prevPendingRef.current) {
+        setNotification(`🔔 Nouvelle commande! (${pendingCount} en attente)`);
+        if (soundOn) playBeep();
+        setTimeout(() => setNotification(null), 4500);
+      }
+      prevPendingRef.current = pendingCount;
+      initializedRef.current = true;
+    } catch {
+      // Server session/API unavailable — keep last visible queue rather than flash.
     }
-    prevPendingRef.current = pendingCount;
-    initializedRef.current = true;
   }, [soundOn]);
 
-  // Initial load only — live updates are driven by the central sync signal
-  // (syncTick fires only when shared data actually changed).
-  useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+  useEffect(() => { void loadOrders(); }, [loadOrders]);
 
-  // React to cross-device sync updates immediately
-  useEffect(() => {
-    loadOrders();
-  }, [syncTick, loadOrders]);
+  // Real-time: refresh only when server emits an order/table event.
+  useEffect(() => subscribePhase2Events('staff', () => { void loadOrders(); }), [loadOrders]);
 
-  const startPreparation = (orderId: string) => {
-    updateOrderStatus(orderId, 'In Preparation');
-    addAuditLog({
-      id: 'log-' + Date.now(),
-      action: 'Preparation Started',
-      details: `Order ${orderId} → In Preparation by ${user?.name}`,
-      user: user?.name || 'Unknown',
-      timestamp: new Date().toISOString(),
-    });
-    refreshOrders();
-    loadOrders();
+  const startPreparation = async (orderId: string) => {
+    try { await updateV2Order(orderId, { status: 'In Preparation' }); await loadOrders(); } catch { /* keep last state */ }
   };
 
-  const markReady = (orderId: string, createdAt: string) => {
+  const markReady = async (orderId: string, createdAt: string) => {
     const prepTimeSeconds = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
-    updateOrderStatus(orderId, 'Ready', prepTimeSeconds);
-    addAuditLog({
-      id: 'log-' + Date.now(),
-      action: 'Order Ready',
-      details: `Order ${orderId} → Ready by ${user?.name} in ${prepTimeSeconds}s`,
-      user: user?.name || 'Unknown',
-      timestamp: new Date().toISOString(),
-    });
-    refreshOrders();
-    loadOrders();
-  };
-
-  // Check if order is paid
-  const isPaid = (orderId: string) => {
-    return getPayments().some((p) => p.orderId === orderId);
+    try { await updateV2Order(orderId, { status: 'Ready', prepTimeSeconds }); await loadOrders(); } catch { /* keep last state */ }
   };
 
   const pendingOrders = orders.filter((o) => o.status === 'Pending' && matchesSearch(o));
@@ -448,7 +426,7 @@ export default function BaristaDashboard() {
             <div className="space-y-3">
               <AnimatePresence>
                 {readyOrders.map((order) => {
-                  const paid = isPaid(order.id);
+                  const paid = order.status === 'Paid';
                   return (
                     <motion.div
                       key={order.id}

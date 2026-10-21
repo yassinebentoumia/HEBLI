@@ -608,7 +608,7 @@ export function setOrderTable(id: string, tableNumber: number | undefined): void
 }
 
 // How many tables the floor has (used by System Table). Change to fit your café.
-export const TABLE_COUNT = 12;
+export const TABLE_COUNT = 27;
 
 // Staff
 export function getStaff(): Staff[] {

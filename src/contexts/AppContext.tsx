@@ -8,6 +8,7 @@ import {
   initializeData,
   getCurrentUser,
   getOrders,
+  getStaff,
   loginStaff,
   logout,
   createBackup,
@@ -17,13 +18,14 @@ import {
   getActiveSessions,
 } from '@/utils/store';
 import { pullRemote, pushRemote, isOnline } from '@/utils/sync';
+import { getServerSession, loginServer, logoutServer } from '@/utils/api';
 
 interface AppContextType {
   user: Staff | null;
   orders: Order[];
   syncTick: number;
   syncStatus: 'connecting' | 'online' | 'offline';
-  login: (pin: string) => Staff | null;
+  login: (pin: string) => Promise<Staff | null>;
   logoutUser: () => void;
   refreshOrders: () => void;
   addLog: (action: string, details: string) => void;
@@ -34,7 +36,7 @@ const AppContext = createContext<AppContextType>({
   orders: [],
   syncTick: 0,
   syncStatus: 'connecting',
-  login: () => null,
+  login: async () => null,
   logoutUser: () => {},
   refreshOrders: () => {},
   addLog: () => {},
@@ -60,7 +62,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // 2) Only seed defaults if neither remote nor local has any data yet.
       initializeData();
 
-      setUser(getCurrentUser());
+      // Restore a server-validated session after refresh. A stale localStorage
+      // user is never enough to unlock staff routes in Phase 2.
+      let sessionUser: Staff | null = null;
+      try {
+        const session = await getServerSession();
+        sessionUser = getStaff().find((s) => s.id === session.data.id && s.active) || null;
+      } catch { /* no server session yet */ }
+      setUser(sessionUser);
       setOrders(getOrders());
       createBackup();
       if (pulled) setSyncTick((t) => t + 1);
@@ -105,29 +114,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (pin: string) => {
-    // Pull latest staff list before validating PIN — fixes "account doesn't exist on phone"
+    // Pull latest staff list first, then authenticate the PIN on the SERVER.
+    // The server creates an HTTP-only signed cookie; local storage is only used
+    // for UI convenience / legacy compatibility, never as the authority.
     await pullRemote();
-    const staff = loginStaff(pin);
-    if (staff) {
-      setUser(staff);
-      addAuditLog({
-        id: 'log-' + Date.now(),
-        action: 'Login',
-        details: `${staff.name} (${staff.role}) logged in`,
-        user: staff.name,
-        timestamp: new Date().toISOString(),
-      });
-      // 🕒 Auto-start the on-duty timer
-      try {
-        // Reuse any active session that already exists for this staff
-        const existing = getActiveSessions().find((s) => s.staffId === staff.id);
-        const sessionId = existing
-          ? existing.id
-          : startSession({ id: staff.id, name: staff.name, role: staff.role });
-        localStorage.setItem('hebli_active_session_id', sessionId);
-      } catch { /* ignore */ }
-      pushRemote();
+    let session;
+    try {
+      session = await loginServer(pin);
+    } catch {
+      return null;
     }
+    const serverStaff = session.data;
+    const local = getStaff().find((s) => s.id === serverStaff.id && s.active && s.role === serverStaff.role);
+    if (!local) return null;
+
+    // Preserve existing local UI/session helpers after server authentication.
+    const staff = loginStaff(pin);
+    if (!staff || staff.id !== serverStaff.id) return null;
+    setUser(staff);
+    addAuditLog({
+      id: 'log-' + Date.now(),
+      action: 'Login',
+      details: `${staff.name} (${staff.role}) logged in`,
+      user: staff.name,
+      timestamp: new Date().toISOString(),
+    });
+    try {
+      const existing = getActiveSessions().find((s) => s.staffId === staff.id);
+      const sessionId = existing ? existing.id : startSession({ id: staff.id, name: staff.name, role: staff.role });
+      localStorage.setItem('hebli_active_session_id', sessionId);
+    } catch { /* ignore */ }
+    pushRemote();
     return staff;
   }, []);
 
@@ -148,6 +165,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('hebli_active_session_id');
     } catch { /* ignore */ }
     logout();
+    void logoutServer(); // clear the HTTP-only server session too
     setUser(null);
     pushRemote();
   }, [user]);
@@ -170,7 +188,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider
       value={{
         user, orders, syncTick, syncStatus,
-        login: login as any, // async wrapper still typed as sync for back-compat
+        login,
         logoutUser, refreshOrders, addLog,
       }}
     >

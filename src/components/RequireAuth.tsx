@@ -1,33 +1,41 @@
 // ============================================================
-// HEBLI – Route guard for staff pages
-// Blocks direct URL access (e.g. /owner) unless the user is a REAL,
-// active staff member with the required role. We re-validate the saved
-// session against the live staff list (id + pin + active + role) so a
-// faked/edited localStorage user can't get in.
+// HEBLI Phase 2C — server-authenticated route guard
+// Uses /api/v2/auth/me (HTTP-only session), never localStorage.
 // ============================================================
 
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { getCurrentUser, getStaff } from '@/utils/store';
+import { Loader2 } from 'lucide-react';
+import { getServerSession } from '@/utils/api';
 import type { StaffRole } from '@/types';
 
 interface Props {
   children: React.ReactNode;
-  role?: StaffRole; // optional required role (e.g. 'Administrator')
+  role?: StaffRole;
 }
 
 export default function RequireAuth({ children, role }: Props) {
-  const saved = getCurrentUser();
-  if (!saved) return <Navigate to="/staff" replace />;
+  const [state, setState] = useState<'checking' | 'allowed' | 'denied'>('checking');
 
-  // Re-validate against the real staff records — the saved user must exist,
-  // be active, and match by id + pin (so a tampered localStorage entry fails).
-  const real = getStaff().find(
-    (s) => s.id === saved.id && s.pin === saved.pin && s.active,
-  );
-  if (!real) return <Navigate to="/staff" replace />;
+  useEffect(() => {
+    let alive = true;
+    getServerSession()
+      .then((session) => {
+        if (!alive) return;
+        const ok = !role || session.data.role === role;
+        setState(ok ? 'allowed' : 'denied');
+      })
+      .catch(() => { if (alive) setState('denied'); });
+    return () => { alive = false; };
+  }, [role]);
 
-  // Role check uses the REAL record's role (not the saved/editable one).
-  if (role && real.role !== role) return <Navigate to="/staff" replace />;
-
+  if (state === 'checking') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0B1512]">
+        <Loader2 className="h-7 w-7 animate-spin text-[#D4AF37]" />
+      </div>
+    );
+  }
+  if (state === 'denied') return <Navigate to="/staff" replace />;
   return <>{children}</>;
 }

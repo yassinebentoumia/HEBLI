@@ -17,6 +17,7 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -407,10 +408,154 @@ function collection(key) {
 function nowIso() { return new Date().toISOString(); }
 function newId(prefix) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`; }
 
-async function commitState() {
+// ============================================================
+// PHASE 2C — Server-side signed staff sessions (HTTP-only cookie)
+// ============================================================
+const AUTH_COOKIE = 'hebli_session';
+const AUTH_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
+// Add AUTH_SECRET in Render Environment for production. Fallback keeps existing
+// dev installs running but sessions reset after a redeploy if no secret is set.
+const AUTH_SECRET = process.env.AUTH_SECRET || crypto.randomBytes(32).toString('hex');
+if (!process.env.AUTH_SECRET) console.warn('⚠ AUTH_SECRET missing — sessions reset on deploy. Set it in Render Environment.');
+
+function parseCookies(req) {
+  const raw = req.headers.cookie || '';
+  return raw.split(';').reduce((out, part) => {
+    const index = part.indexOf('=');
+    if (index > 0) out[part.slice(0, index).trim()] = decodeURIComponent(part.slice(index + 1).trim());
+    return out;
+  }, {});
+}
+
+function b64(data) { return Buffer.from(JSON.stringify(data)).toString('base64url'); }
+function sign(data) { return crypto.createHmac('sha256', AUTH_SECRET).update(data).digest('base64url'); }
+function pinStamp(pin) { return crypto.createHmac('sha256', AUTH_SECRET).update(String(pin)).digest('hex').slice(0, 24); }
+
+function createSessionToken(staff) {
+  const payload = b64({ id: staff.id, pin: pinStamp(staff.pin), exp: Date.now() + AUTH_TTL_MS });
+  return `${payload}.${sign(payload)}`;
+}
+
+function getSessionStaff(req) {
+  const token = parseCookies(req)[AUTH_COOKIE];
+  if (!token || !token.includes('.')) return null;
+  const [payload, signature] = token.split('.');
+  const expected = sign(payload);
+  try {
+    if (signature.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+    const data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    if (!data?.id || !data?.exp || data.exp < Date.now()) return null;
+    const staff = collection('hebli_staff').find((s) => s.id === data.id && s.active);
+    if (!staff || data.pin !== pinStamp(staff.pin)) return null; // invalid after pin change/suspension
+    return staff;
+  } catch { return null; }
+}
+
+function sessionPublic(staff) {
+  if (!staff) return null;
+  return { id: staff.id, name: staff.name, role: staff.role, active: staff.active, rating: staff.rating };
+}
+
+function setSessionCookie(res, token) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(AUTH_TTL_MS / 1000)}${secure}`);
+}
+function clearSessionCookie(res) {
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${AUTH_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`);
+}
+
+function requireAuth(roles = []) {
+  return (req, res, next) => {
+    const staff = getSessionStaff(req);
+    if (!staff) return res.status(401).json({ error: 'authentication_required' });
+    if (roles.length && !roles.includes(staff.role)) return res.status(403).json({ error: 'insufficient_role' });
+    req.staff = staff;
+    next();
+  };
+}
+
+// Basic in-memory brute-force protection. Good for one Render instance; a Redis
+// rate limit is a later scale enhancement.
+const loginAttempts = new Map();
+function loginAllowed(ip) {
+  const now = Date.now();
+  const list = (loginAttempts.get(ip) || []).filter((t) => now - t < 60_000);
+  loginAttempts.set(ip, list);
+  return list.length < 8;
+}
+function failedLogin(ip) { loginAttempts.set(ip, [...(loginAttempts.get(ip) || []), Date.now()]); }
+
+app.post('/api/v2/auth/login', (req, res) => {
+  const ip = clientIp(req);
+  if (!loginAllowed(ip)) return res.status(429).json({ error: 'too_many_attempts', retryAfterSeconds: 60 });
+  const pin = String(req.body?.pin || '');
+  const staff = collection('hebli_staff').find((s) => s.active && s.pin === pin);
+  if (!staff) { failedLogin(ip); return res.status(401).json({ error: 'invalid_pin' }); }
+  loginAttempts.delete(ip);
+  setSessionCookie(res, createSessionToken(staff));
+  res.json({ data: sessionPublic(staff) });
+});
+
+app.get('/api/v2/auth/me', (req, res) => {
+  const staff = getSessionStaff(req);
+  if (!staff) return res.status(401).json({ error: 'authentication_required' });
+  res.json({ data: sessionPublic(staff) });
+});
+
+app.post('/api/v2/auth/logout', (_req, res) => {
+  clearSessionCookie(res);
+  res.json({ ok: true });
+});
+
+// ============================================================
+// PHASE 2B — Server Sent Events (SSE) real-time event hub
+// ============================================================
+const sseClients = new Map();
+let sseNextId = 1;
+
+function broadcastEvent(type, payload = {}, audience = 'all') {
+  const body = JSON.stringify({ type, updatedAt: state._updatedAt || Date.now(), ...payload });
+  for (const [id, client] of sseClients) {
+    if (audience === 'staff' && client.scope !== 'staff') continue;
+    if (audience === 'client' && client.scope !== 'client') continue;
+    try { client.res.write(`event: ${type}\ndata: ${body}\n\n`); }
+    catch { sseClients.delete(id); }
+  }
+}
+
+// Heartbeat keeps proxies from silently closing the event stream during service.
+setInterval(() => {
+  for (const [id, client] of sseClients) {
+    try { client.res.write(': heartbeat\n\n'); } catch { sseClients.delete(id); }
+  }
+}, 25_000).unref();
+
+app.get('/api/v2/events', (req, res) => {
+  const scope = req.query.scope === 'staff' ? 'staff' : 'client';
+  const staff = getSessionStaff(req);
+  if (scope === 'staff' && !staff) return res.status(401).end();
+  if (scope === 'client' && !staff && !isAccessAllowed(req)) return res.status(403).end();
+
+  res.status(200);
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  const id = sseNextId++;
+  sseClients.set(id, { res, scope, staff: sessionPublic(staff) });
+  res.write(`event: connected\ndata: ${JSON.stringify({ type: 'connected', scope, updatedAt: state._updatedAt || 0 })}\n\n`);
+  req.on('close', () => sseClients.delete(id));
+});
+
+async function commitState(eventType = 'state.updated', payload = {}, audience = 'all') {
   state._updatedAt = Date.now();
-  // Persist before responding: SQL is the source of truth in production.
+  // Persist before broadcasting: an event always points to durable SQL state.
   await persistNow();
+  broadcastEvent(eventType, payload, audience);
   return state._updatedAt;
 }
 
@@ -434,16 +579,19 @@ function appendNotification(target, title, body, type = 'info') {
 
 // Optional Wi-Fi access on public (customer) endpoints only.
 function requireCafeAccess(req, res, next) {
-  if (!isAccessAllowed(req)) {
-    return res.status(403).json({ error: 'cafe_wifi_required' });
-  }
-  next();
+  // Logged-in staff/owner may manage from anywhere; guests require café Wi-Fi.
+  if (getSessionStaff(req) || isAccessAllowed(req)) return next();
+  return res.status(403).json({ error: 'cafe_wifi_required' });
 }
 
 // ----- Products (customer menu only receives active products) -----
 app.get('/api/v2/products', requireCafeAccess, (_req, res) => {
   const products = collection('hebli_products').filter((p) => p?.active !== false);
   res.json({ data: products, updatedAt: state._updatedAt || 0 });
+});
+
+app.get('/api/v2/categories', requireCafeAccess, (_req, res) => {
+  res.json({ data: collection('hebli_categories'), updatedAt: state._updatedAt || 0 });
 });
 
 // ----- Tables (computed from active / paid-but-not-freed orders) -----
@@ -472,10 +620,10 @@ app.get('/api/v2/tables', requireCafeAccess, (_req, res) => {
 });
 
 // ----- Orders -----
-app.get('/api/v2/orders', requireCafeAccess, (req, res) => {
-  const view = String(req.query.view || 'active'); // active | barista | all
-  const table = req.query.table ? Number(req.query.table) : null;
+app.get('/api/v2/orders', requireAuth(['Barista', 'Cashier', 'Administrator']), (req, res) => {
   const status = req.query.status ? String(req.query.status) : null;
+  const view = String(req.query.view || (status ? 'all' : 'active')); // active | barista | all
+  const table = req.query.table ? Number(req.query.table) : null;
   const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
 
   let orders = [...collection('hebli_orders')];
@@ -505,20 +653,46 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
     return res.status(409).json({ error: 'table_occupied', tableNumber, orderId: conflict.id });
   }
 
+  // Never trust prices/names from the browser. Rebuild each item from the
+  // owner-managed product catalog, including only valid paid supplements.
+  const catalog = collection('hebli_products').filter((p) => p?.active !== false);
   const safeItems = items
     .filter((i) => i && typeof i === 'object' && i.productId && Number(i.quantity) > 0)
-    .map((i) => ({
-      productId: String(i.productId),
-      name: String(i.name || 'Product').slice(0, 180),
-      price: Math.max(0, Number(i.price) || 0),
-      quantity: Math.min(99, Math.max(1, Math.floor(Number(i.quantity)))),
-      image: String(i.image || ''),
-      supplements: Array.isArray(i.supplements) ? i.supplements : undefined,
-    }));
+    .map((i) => {
+      const product = catalog.find((p) => p.id === String(i.productId));
+      if (!product) return null;
+      const requestedSupps = Array.isArray(i.supplements) ? i.supplements : [];
+      const supplements = requestedSupps
+        .map((requested) => (product.supplements || []).find((s) => s.id === requested?.id))
+        .filter(Boolean);
+      const price = Number(product.price || 0) + supplements.reduce((sum, s) => sum + Number(s.price || 0), 0);
+      return {
+        productId: String(product.id),
+        name: String(product.name).slice(0, 180),
+        price: Math.max(0, price),
+        quantity: Math.min(99, Math.max(1, Math.floor(Number(i.quantity)))),
+        image: String(product.image || ''),
+        supplements: supplements.length ? supplements : undefined,
+      };
+    })
+    .filter(Boolean);
   if (!safeItems.length) return res.status(400).json({ error: 'valid_order_items_required' });
 
   const total = safeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const now = nowIso();
+
+  // Optional loyalty member: server creates/finds it (client never writes loyalty
+  // balances directly). Normalized id keeps future visits attached to one person.
+  let loyaltyId;
+  const loyaltyName = String(body.loyaltyName || '').trim().slice(0, 120);
+  if (loyaltyName) {
+    loyaltyId = `loy-${loyaltyName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-]/g, '')}`;
+    const members = collection('hebli_loyalty');
+    if (!members.some((m) => m.id === loyaltyId)) {
+      members.push({ id: loyaltyId, name: loyaltyName, points: 0, totalSpent: 0, visits: 0, tier: 'Silver', createdAt: now, updatedAt: now });
+    }
+  }
+
   const order = {
     id: newId('ORD'),
     clientName: String(body.clientName || `Table ${tableNumber}`).slice(0, 120),
@@ -527,7 +701,7 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
     status: 'Pending',
     note: body.note ? String(body.note).slice(0, 500) : undefined,
     tableNumber,
-    loyaltyId: body.loyaltyId ? String(body.loyaltyId) : undefined,
+    loyaltyId,
     createdAt: now,
     updatedAt: now,
   };
@@ -535,11 +709,11 @@ app.post('/api/v2/orders', requireCafeAccess, async (req, res) => {
   appendAudit('Order Placed', `Order ${order.id} for Table ${tableNumber} • ${order.total.toFixed(2)}`, order.clientName);
   appendNotification('Barista', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
   appendNotification('Cashier', 'New Order', `${order.id} • Table ${tableNumber}`, 'order');
-  const updatedAt = await commitState();
+  const updatedAt = await commitState('order.created', { orderId: order.id, tableNumber, status: order.status });
   res.status(201).json({ data: publicOrder(order), updatedAt });
 });
 
-app.patch('/api/v2/orders/:id', async (req, res) => {
+app.patch('/api/v2/orders/:id', requireAuth(['Barista', 'Administrator']), async (req, res) => {
   const order = collection('hebli_orders').find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'order_not_found' });
   const body = req.body || {};
@@ -548,6 +722,10 @@ app.patch('/api/v2/orders/:id', async (req, res) => {
     if (!ORDER_STATUSES.has(body.status)) return res.status(400).json({ error: 'invalid_status' });
     if (order.status === 'Cancelled' || order.status === 'Paid') {
       return res.status(409).json({ error: 'order_is_final', status: order.status });
+    }
+    // Baristas may only move kitchen flow forward; payment/cancel is separate.
+    if (req.staff.role === 'Barista' && !['In Preparation', 'Ready'].includes(body.status)) {
+      return res.status(403).json({ error: 'barista_status_not_allowed' });
     }
     order.status = body.status;
     if (body.status === 'Ready' && body.prepTimeSeconds !== undefined) {
@@ -561,12 +739,12 @@ app.patch('/api/v2/orders/:id', async (req, res) => {
     order.tableNumber = n;
   }
   order.updatedAt = nowIso();
-  appendAudit('Order Updated', `Order ${order.id} → ${order.status}`, String(body.actor || 'Staff'));
-  const updatedAt = await commitState();
+  appendAudit('Order Updated', `Order ${order.id} → ${order.status}`, req.staff.name);
+  const updatedAt = await commitState('order.updated', { orderId: order.id, tableNumber: order.tableNumber, status: order.status });
   res.json({ data: publicOrder(order), updatedAt });
 });
 
-app.post('/api/v2/orders/:id/cancel', async (req, res) => {
+app.post('/api/v2/orders/:id/cancel, requireAuth(['Administrator']), async (req, res) => {
   const order = collection('hebli_orders').find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'order_not_found' });
   if (order.status === 'Paid') return res.status(409).json({ error: 'paid_order_cannot_be_cancelled' });
@@ -576,14 +754,14 @@ app.post('/api/v2/orders/:id/cancel', async (req, res) => {
   order.tableNumber = undefined;
   order.updatedAt = nowIso();
   const reason = req.body?.reason ? ` — ${String(req.body.reason).slice(0, 200)}` : '';
-  appendAudit('Order Cancelled', `Order ${order.id} cancelled${reason}`, String(req.body?.actor || 'Owner'));
+  appendAudit('Order Cancelled', `Order ${order.id} cancelled${reason}`, req.staff.name);
   appendNotification('all', 'Commande annulée', `La commande ${order.id} a été annulée.${reason}`, 'info');
-  const updatedAt = await commitState();
+  const updatedAt = await commitState('order.cancelled', { orderId: order.id, status: order.status });
   res.json({ data: publicOrder(order), updatedAt });
 });
 
 // ----- Payments (atomic order status + payment record) -----
-app.get('/api/v2/payments', (req, res) => {
+app.get('/api/v2/payments', requireAuth(['Cashier', 'Administrator']), (req, res) => {
   const date = req.query.date ? String(req.query.date) : null;
   const limit = Math.min(500, Math.max(1, Number(req.query.limit || 100)));
   let payments = [...collection('hebli_payments')];
@@ -592,7 +770,7 @@ app.get('/api/v2/payments', (req, res) => {
   res.json({ data: payments.slice(0, limit), updatedAt: state._updatedAt || 0 });
 });
 
-app.post('/api/v2/orders/:id/pay', async (req, res) => {
+app.post('/api/v2/orders/:id/pay', requireAuth(['Cashier', 'Administrator']), async (req, res) => {
   const order = collection('hebli_orders').find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'order_not_found' });
   if (order.status === 'Cancelled') return res.status(409).json({ error: 'cancelled_order_cannot_be_paid' });
@@ -602,7 +780,7 @@ app.post('/api/v2/orders/:id/pay', async (req, res) => {
   const now = new Date();
   const payment = {
     id: newId('PAY'), orderId: order.id, amount: order.total,
-    cashierName: String(req.body?.cashierName || 'Waiter').slice(0, 120),
+    cashierName: req.staff.name,
     date: now.toISOString().slice(0, 10),
     time: now.toTimeString().slice(0, 8),
     createdAt: now.toISOString(),
@@ -625,11 +803,11 @@ app.post('/api/v2/orders/:id/pay', async (req, res) => {
     }
   }
 
-  const updatedAt = await commitState();
+  const updatedAt = await commitState('order.paid', { orderId: order.id, tableNumber: order.tableNumber, status: order.status });
   res.status(201).json({ data: { order: publicOrder(order), payment }, updatedAt });
 });
 
-app.post('/api/v2/tables/:number/free', async (req, res) => {
+app.post('/api/v2/tables/:number/free', requireAuth(['Cashier', 'Administrator']), async (req, res) => {
   const number = Number(req.params.number);
   if (!Number.isInteger(number) || number < 1 || number > TABLE_COUNT) {
     return res.status(400).json({ error: 'invalid_table_number' });
@@ -640,8 +818,8 @@ app.post('/api/v2/tables/:number/free', async (req, res) => {
     return res.status(409).json({ error: 'active_order_on_table' });
   }
   affected.forEach((o) => { o.tableNumber = undefined; o.updatedAt = nowIso(); });
-  appendAudit('Table Freed', `Table ${number} freed`, String(req.body?.actor || 'Waiter'));
-  const updatedAt = await commitState();
+  appendAudit('Table Freed', `Table ${number} freed`, req.staff.name);
+  const updatedAt = await commitState('table.freed', { tableNumber: number, freedOrders: affected.map((o) => o.id) });
   res.json({ data: { tableNumber: number, freedOrders: affected.map((o) => o.id) }, updatedAt });
 });
 
