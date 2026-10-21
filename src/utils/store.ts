@@ -57,7 +57,8 @@ function atomicWrite<T>(key: string, data: T): void {
     localStorage.removeItem(tmpKey);
     // Push to cloud if this key is synced
     if (SYNC_KEYS.includes(key)) {
-      schedulePush();
+      // Tell sync exactly which collection changed; don't upload the whole café.
+      schedulePush(key);
     }
   } catch (e) {
     console.error('Atomic write failed:', e);
@@ -348,7 +349,7 @@ export function updateProduct(id: string, updates: Partial<Product>): void {
   const products = getProducts();
   const idx = products.findIndex((p) => p.id === id);
   if (idx !== -1) {
-    products[idx] = { ...products[idx], ...updates };
+    products[idx] = { ...products[idx], ...updates, updatedAt: new Date().toISOString() };
     saveProducts(products);
   }
 }
@@ -449,7 +450,7 @@ export function updateTicket(id: string, updates: Partial<Ticket>): void {
   const all = getTickets();
   const idx = all.findIndex((t) => t.id === id);
   if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
+    all[idx] = { ...all[idx], ...updates, updatedAt: new Date().toISOString() };
     atomicWrite(KEYS.tickets, all);
   }
 }
@@ -552,6 +553,7 @@ export function markNotificationRead(id: string): void {
   const idx = all.findIndex((n) => n.id === id);
   if (idx !== -1) {
     all[idx].read = true;
+    all[idx].updatedAt = new Date().toISOString();
     atomicWrite(KEYS.notifications, all);
   }
 }
@@ -562,6 +564,7 @@ export function markAllNotificationsRead(name: string, role: string): void {
   all.forEach((n) => {
     if ((n.target === 'all' || n.target === name || n.target === role) && !n.read) {
       n.read = true;
+      n.updatedAt = new Date().toISOString();
       changed = true;
     }
   });
@@ -629,7 +632,7 @@ export function updateStaffMember(id: string, updates: Partial<Staff>): void {
   const staff = getStaff();
   const idx = staff.findIndex((s) => s.id === id);
   if (idx !== -1) {
-    staff[idx] = { ...staff[idx], ...updates };
+    staff[idx] = { ...staff[idx], ...updates, updatedAt: new Date().toISOString() };
     saveStaff(staff);
   }
 }
@@ -861,7 +864,7 @@ export function updateSupplier(id: string, updates: Partial<Supplier>): void {
   const all = getSuppliers();
   const idx = all.findIndex((s) => s.id === id);
   if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
+    all[idx] = { ...all[idx], ...updates, updatedAt: new Date().toISOString() };
     atomicWrite(KEYS.suppliers, all);
   }
 }

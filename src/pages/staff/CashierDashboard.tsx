@@ -25,14 +25,17 @@ import CategoryIcon from '@/components/CategoryIcon';
 import MySchedule from '@/components/MySchedule';
 import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
-import { TABLE_COUNT, formatMoney } from '@/utils/store';
-import { getV2Products, getV2Tables, getV2Orders, createV2Order, payV2Order, freeV2Table, subscribePhase2Events } from '@/utils/api';
+import {
+  getOrders, addOrder, updateOrderStatus, addPayment, addAuditLog, addNotification,
+  setOrderTable, TABLE_COUNT, getActiveProducts, awardLoyaltyForOrder, formatMoney,
+} from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order, Product, CartItem } from '@/types';
+import { format } from 'date-fns';
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser } = useApp();
+  const { user, logoutUser, refreshOrders, syncTick } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -55,44 +58,31 @@ export default function CashierDashboard() {
   const [builderNote, setBuilderNote] = useState('');
   const [builderSearch, setBuilderSearch] = useState('');
 
-  const loadOrders = useCallback(async () => {
-    try {
-      // Active orders + table snapshot (includes paid-but-not-freed tables).
-      const [active, tableSnapshot] = await Promise.all([
-        getV2Orders({ view: 'active', limit: 200 }),
-        getV2Tables(),
-      ]);
-      const byId = new Map<string, Order>();
-      active.data.forEach((o) => byId.set(o.id, o));
-      tableSnapshot.data.forEach((table) => { if (table.order) byId.set(table.order.id, table.order); });
-      const relevant = Array.from(byId.values()).filter((o) => o.status !== 'Cancelled');
-      relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      setOrders(relevant);
-
-      const pendingCount = active.data.filter((o) => o.status === 'Pending').length;
-      if (initializedRef.current && pendingCount > prevPendingRef.current) {
-        setToast(`Nouvelle commande ! (${pendingCount} en attente)`);
-        setTimeout(() => setToast(null), 4500);
-      }
-      prevPendingRef.current = pendingCount;
-      initializedRef.current = true;
-    } catch { /* retain last rendered state if API is briefly unavailable */ }
+  const loadOrders = useCallback(() => {
+    const all = getOrders();
+    // Keep unpaid orders + paid tables until waiter presses Libérer.
+    const relevant = all.filter((o) => o.status !== 'Cancelled' && (o.status !== 'Paid' || o.tableNumber));
+    relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    setOrders(relevant);
+    const pendingCount = relevant.filter((o) => o.status === 'Pending').length;
+    if (initializedRef.current && pendingCount > prevPendingRef.current) {
+      setToast(`Nouvelle commande ! (${pendingCount} en attente)`);
+      setTimeout(() => setToast(null), 4500);
+    }
+    prevPendingRef.current = pendingCount;
+    initializedRef.current = true;
   }, []);
 
   useEffect(() => {
-    let alive = true;
-    getV2Products().then((r) => { if (alive) setProducts(r.data); }).catch(() => {});
-    void loadOrders();
-    return () => { alive = false; };
+    setProducts(getActiveProducts());
+    loadOrders();
   }, [loadOrders]);
 
-  // Realtime first (SSE) + compact 4s table/order safety check. The waiter
-  // never has to refresh manually, even when a PWA/mobile stream reconnects.
   useEffect(() => {
-    const unsubscribe = subscribePhase2Events('staff', () => { void loadOrders(); }, () => { void loadOrders(); });
-    const safety = setInterval(() => { void loadOrders(); }, 4_000);
-    return () => { unsubscribe(); clearInterval(safety); };
-  }, [loadOrders]);
+    loadOrders();
+    const safety = setInterval(loadOrders, 2_000);
+    return () => clearInterval(safety);
+  }, [syncTick, loadOrders]);
 
   // ---- Derived lists -------------------------------------------------------
   const newOrders = orders.filter((o) => o.status === 'Pending');
@@ -113,23 +103,25 @@ export default function CashierDashboard() {
   const occupiedTables = Array.from(tableMap.keys()).sort((a, b) => a - b);
 
   // ---- Actions -------------------------------------------------------------
-  const markAsPaid = async (order: Order) => {
+  const markAsPaid = (order: Order) => {
     setProcessingId(order.id);
-    try {
-      await payV2Order(order.id);
-      await loadOrders();
-      // Keep the dialog OPEN so the waiter sees "Payée" + "Libérer".
-    } catch { /* order may have changed on another device */ }
-    finally { setProcessingId(null); }
+    setTimeout(() => {
+      updateOrderStatus(order.id, 'Paid');
+      const now = new Date();
+      addPayment({ id: 'PAY-' + String(Date.now()).slice(-8), orderId: order.id, amount: order.total, cashierName: user?.name || 'Waiter', date: format(now, 'yyyy-MM-dd'), time: format(now, 'HH:mm:ss'), createdAt: now.toISOString() });
+      addAuditLog({ id: 'log-' + Date.now(), action: 'Payment Received', details: `${formatMoney(order.total)} payé pour la commande ${order.id}`, user: user?.name || 'Waiter', timestamp: now.toISOString() });
+      awardLoyaltyForOrder(order);
+      refreshOrders();
+      loadOrders();
+      setProcessingId(null);
+    }, 180);
   };
 
-  // "Libérer" — server verifies there is no active order before freeing table.
-  const clearTable = async (tableNumber: number) => {
-    try {
-      await freeV2Table(tableNumber);
-      await loadOrders();
-      setDetailTable(null);
-    } catch { /* active order still on table or network issue */ }
+  const clearTable = (tableNumber: number) => {
+    orders.filter((o) => o.tableNumber === tableNumber).forEach((o) => setOrderTable(o.id, undefined));
+    refreshOrders();
+    loadOrders();
+    setDetailTable(null);
   };
 
   // ---- New order builder ---------------------------------------------------
@@ -160,20 +152,28 @@ export default function CashierDashboard() {
   const cartTotal = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const submitNewOrder = async () => {
+  const submitNewOrder = () => {
     if (newOrderTable === null || cart.length === 0) return;
-    try {
-      await createV2Order({
-        tableNumber: newOrderTable,
-        items: cart,
-        clientName: `Table ${newOrderTable}`,
-        note: builderNote.trim() || undefined,
-      });
-      setNewOrderTable(null);
-      setCart([]);
-      setBuilderNote('');
-      await loadOrders();
-    } catch { /* keep order builder open so waiter can retry */ }
+    const now = new Date().toISOString();
+    const order: Order = {
+      id: 'ORD-' + String(Date.now()).slice(-8),
+      clientName: `Table ${newOrderTable}`,
+      items: [...cart],
+      total: cartTotal,
+      status: 'Pending',
+      note: builderNote.trim() || undefined,
+      tableNumber: newOrderTable,
+      createdAt: now,
+      updatedAt: now,
+    };
+    addOrder(order);
+    addAuditLog({ id: 'log-' + Date.now(), action: 'Order Placed (Waiter)', details: `Commande ${order.id} créée pour Table ${newOrderTable} • ${formatMoney(cartTotal)}`, user: user?.name || 'Waiter', timestamp: now });
+    addNotification({ id: 'ntf-' + Date.now(), target: 'Barista', title: 'New Order', body: `${order.id} • Table ${newOrderTable}`, type: 'order', read: false, createdAt: now });
+    setNewOrderTable(null);
+    setCart([]);
+    setBuilderNote('');
+    refreshOrders();
+    loadOrders();
   };
 
   const waiterTitle = user ? getStaffTitle(user) : 'Serveur';

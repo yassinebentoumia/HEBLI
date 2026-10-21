@@ -146,6 +146,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [user]);
 
+  // If Owner deletes/suspends a staff member on another device, terminate that
+  // user's local session as soon as the next sync arrives.
+  useEffect(() => {
+    if (!user) return;
+    const live = getStaff().find((staff) => staff.id === user.id && staff.active && staff.pin === user.pin);
+    if (!live) {
+      logout();
+      void logoutServer();
+      setUser(null);
+      window.dispatchEvent(new Event('hebli-auth-expired'));
+    }
+  }, [syncTick, user]);
+
   const login = useCallback(async (pin: string) => {
     // Pull latest staff list first, then authenticate the PIN on the SERVER.
     // The server creates an HTTP-only signed cookie; local storage is only used

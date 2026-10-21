@@ -43,6 +43,7 @@ export interface Staff {
   salaryPerMinute?: number;      // DT per minute (used to compute paid time)
   schedule?: WeekSchedule;       // booked working hours Mon→Sun
   createdAt: string;
+  updatedAt?: string;
 }
 
 // Optional paid add-on / extra for a product (e.g. "Extra shot", "Oat milk").
@@ -62,6 +63,7 @@ export interface Product {
   active: boolean;
   supplements?: Supplement[];   // add-ons the guest can choose
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface CartItem {
@@ -104,6 +106,7 @@ export interface Ticket {
   message: string;
   status: 'pending' | 'accepted' | 'closed';
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface StaffSession {
@@ -126,6 +129,7 @@ export interface AppNotification {
   type: 'order' | 'message' | 'info';
   read: boolean;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // ============================================================
@@ -146,6 +150,7 @@ export interface Supplier {
   address?: string;
   products: SupplierProduct[];
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface InvoiceLine {
@@ -242,6 +247,7 @@ export interface Category {
   name: string;
   icon: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface AIQuery {

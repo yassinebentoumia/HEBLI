@@ -27,8 +27,7 @@ import ChatPanel from '@/components/ChatPanel';
 import MySchedule from '@/components/MySchedule';
 import { HebliMark } from '@/components/Logo';
 import { useApp } from '@/contexts/AppContext';
-import { formatMoney } from '@/utils/store';
-import { getV2Orders, updateV2Order, subscribePhase2Events } from '@/utils/api';
+import { getOrders, updateOrderStatus, addAuditLog, formatMoney } from '@/utils/store';
 import { getStaffTitle } from '@/utils/roles';
 import type { Order } from '@/types';
 
@@ -106,7 +105,7 @@ function LiveTimer({ startTime }: { startTime: string }) {
 
 export default function BaristaDashboard() {
   const navigate = useNavigate();
-  const { user, logoutUser } = useApp();
+  const { user, logoutUser, refreshOrders, syncTick } = useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
@@ -127,49 +126,44 @@ export default function BaristaDashboard() {
     );
   };
 
-  const loadOrders = useCallback(async () => {
-    try {
-      // Kitchen queue + today's paid completions: small role-scoped API calls.
-      const today = new Date().toISOString().split('T')[0];
-      const [kitchen, paid] = await Promise.all([
-        getV2Orders({ view: 'barista', limit: 200 }),
-        getV2Orders({ status: 'Paid', limit: 200 }),
-      ]);
-      const paidToday = paid.data.filter((o) => new Date(o.updatedAt || o.createdAt).toISOString().split('T')[0] === today);
-      const relevant = [...kitchen.data, ...paidToday];
-      setOrders(relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+  const loadOrders = useCallback(() => {
+    const all = getOrders();
+    const relevant = all.filter((o) => ['Pending', 'In Preparation', 'Ready', 'Paid'].includes(o.status));
+    relevant.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    setOrders(relevant);
 
-      const pendingCount = kitchen.data.filter((o) => o.status === 'Pending').length;
-      if (initializedRef.current && pendingCount > prevPendingRef.current) {
-        setNotification(`🔔 Nouvelle commande! (${pendingCount} en attente)`);
-        if (soundOn) playBeep();
-        setTimeout(() => setNotification(null), 4500);
-      }
-      prevPendingRef.current = pendingCount;
-      initializedRef.current = true;
-    } catch {
-      // Server session/API unavailable — keep last visible queue rather than flash.
+    const pendingCount = relevant.filter((o) => o.status === 'Pending').length;
+    if (initializedRef.current && pendingCount > prevPendingRef.current) {
+      setNotification(`🔔 Nouvelle commande! (${pendingCount} en attente)`);
+      if (soundOn) playBeep();
+      setTimeout(() => setNotification(null), 4500);
     }
+    prevPendingRef.current = pendingCount;
+    initializedRef.current = true;
   }, [soundOn]);
 
-  useEffect(() => { void loadOrders(); }, [loadOrders]);
-
-  // Realtime first (SSE). A small role-scoped 4s safety check guarantees the
-  // kitchen never needs a manual browser refresh if a mobile/PWA stream drops.
-  // This fetches only kitchen orders, not the old full café snapshot.
+  useEffect(() => { loadOrders(); }, [loadOrders]);
+  // Global sync/SSE bridge updates syncTick instantly; 2s safety refresh
+  // guarantees no staff member has to press browser refresh.
   useEffect(() => {
-    const unsubscribe = subscribePhase2Events('staff', () => { void loadOrders(); }, () => { void loadOrders(); });
-    const safety = setInterval(() => { void loadOrders(); }, 4_000);
-    return () => { unsubscribe(); clearInterval(safety); };
-  }, [loadOrders]);
+    loadOrders();
+    const safety = setInterval(loadOrders, 2_000);
+    return () => clearInterval(safety);
+  }, [syncTick, loadOrders]);
 
-  const startPreparation = async (orderId: string) => {
-    try { await updateV2Order(orderId, { status: 'In Preparation' }); await loadOrders(); } catch { /* keep last state */ }
+  const startPreparation = (orderId: string) => {
+    updateOrderStatus(orderId, 'In Preparation');
+    addAuditLog({ id: 'log-' + Date.now(), action: 'Preparation Started', details: `Order ${orderId} → In Preparation by ${user?.name}`, user: user?.name || 'Barista', timestamp: new Date().toISOString() });
+    refreshOrders();
+    loadOrders();
   };
 
-  const markReady = async (orderId: string, createdAt: string) => {
+  const markReady = (orderId: string, createdAt: string) => {
     const prepTimeSeconds = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
-    try { await updateV2Order(orderId, { status: 'Ready', prepTimeSeconds }); await loadOrders(); } catch { /* keep last state */ }
+    updateOrderStatus(orderId, 'Ready', prepTimeSeconds);
+    addAuditLog({ id: 'log-' + Date.now(), action: 'Order Ready', details: `Order ${orderId} → Ready by ${user?.name}`, user: user?.name || 'Barista', timestamp: new Date().toISOString() });
+    refreshOrders();
+    loadOrders();
   };
 
   const pendingOrders = orders.filter((o) => o.status === 'Pending' && matchesSearch(o));

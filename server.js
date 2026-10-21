@@ -517,10 +517,17 @@ app.post('/api/ai', async (req, res) => {
   }
 });
 
-// GET current shared state
-// Legacy compatibility endpoint. Phase 2 clients will progressively move to
-// /api/v2/* endpoints below, avoiding full-state downloads.
-app.get('/api/state', (_req, res) => {
+// GET current shared state (stable legacy sync endpoint).
+// Critical optimization: when a device already has the current revision, return
+// 204 with NO huge JSON payload. Products can contain base64 photos and audit/chat
+// history can grow — sending all that every few seconds caused the observed lag.
+app.get('/api/state', (req, res) => {
+  const since = Number(req.query.since || 0);
+  const updatedAt = Number(state._updatedAt || 0);
+  if (since && updatedAt && since >= updatedAt) {
+    return res.status(204).end();
+  }
+  res.set('Cache-Control', 'no-store');
   res.json(state);
 });
 

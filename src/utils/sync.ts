@@ -98,11 +98,11 @@ function readLocalArray(key: string): any[] {
   }
 }
 
-function buildSnapshot(): Record<string, any> {
+function buildSnapshot(keys?: Iterable<string>): Record<string, any> {
   const snap: Record<string, any> = { _updatedAt: Date.now() };
-  ARRAY_KEYS.forEach((k) => {
-    snap[k] = readLocalArray(k);
-  });
+  const selected = keys ? Array.from(keys).filter((k) => ARRAY_KEYS.includes(k)) : ARRAY_KEYS;
+  selected.forEach((k) => { snap[k] = readLocalArray(k); });
+  // Tombstones are tiny and must accompany every delta push so deletes win.
   snap[TOMBSTONE_KEY] = getTombstones();
   return snap;
 }
@@ -178,7 +178,11 @@ let online = true;
 // Pull from server → returns true if local changed
 export async function pullRemote(): Promise<boolean> {
   try {
-    const res = await fetch(api('/api/state'), { cache: 'no-store' });
+    // Ask server for data only if its revision changed. Most polls now return
+    // a tiny 204 instead of products/images/orders/chat/invoices all over again.
+    const suffix = lastUpdatedAt ? `?since=${encodeURIComponent(String(lastUpdatedAt))}` : '';
+    const res = await fetch(api(`/api/state${suffix}`), { cache: 'no-store' });
+    if (res.status === 204) { online = true; return false; }
     if (!res.ok) { online = false; return false; }
     const data = await res.json();
     online = true;
@@ -193,19 +197,30 @@ export async function pullRemote(): Promise<boolean> {
 
 let pushing = false;
 let pendingPush = false;
+// Dirty collections allow chat/staff/order changes to upload only their own
+// records instead of serializing the entire café (images/invoices/logs included).
+const dirtyKeys = new Set<string>();
 
 // Push local data → server (debounced & coalesced)
 export async function pushRemote(): Promise<boolean> {
   if (pushing) { pendingPush = true; return false; }
   pushing = true;
+  // Capture dirty keys for this transaction. New edits during the request remain
+  // in dirtyKeys and are handled by the queued follow-up push.
+  const keysForPush = new Set(dirtyKeys);
+  dirtyKeys.clear();
   try {
-    const snap = buildSnapshot();
+    const snap = buildSnapshot(keysForPush.size ? keysForPush : undefined);
     const res = await fetch(api('/api/state'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(snap),
     });
-    if (!res.ok) { online = false; pushing = false; return false; }
+    if (!res.ok) {
+      // Preserve unsent changes for retry when connection returns.
+      keysForPush.forEach((key) => dirtyKeys.add(key));
+      online = false; pushing = false; return false;
+    }
     const data = await res.json();
     if (data && data._updatedAt) lastUpdatedAt = data._updatedAt;
     online = true;
@@ -216,6 +231,7 @@ export async function pushRemote(): Promise<boolean> {
     }
     return true;
   } catch {
+    keysForPush.forEach((key) => dirtyKeys.add(key));
     online = false;
     pushing = false;
     return false;
@@ -223,9 +239,10 @@ export async function pushRemote(): Promise<boolean> {
 }
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
-export function schedulePush(): void {
+export function schedulePush(key?: string): void {
+  if (key && ARRAY_KEYS.includes(key)) dirtyKeys.add(key);
   if (pushTimer) clearTimeout(pushTimer);
-  pushTimer = setTimeout(() => pushRemote(), 400);
+  pushTimer = setTimeout(() => pushRemote(), 250);
 }
 
 export function isOnline(): boolean {

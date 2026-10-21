@@ -11,14 +11,16 @@ import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useT } from '@/i18n/I18nProvider';
-import { getActiveProducts, getCategories, TABLE_COUNT, formatMoney } from '@/utils/store';
-import { getV2Products, getV2Categories, getV2Tables, createV2Order, subscribePhase2Events } from '@/utils/api';
+import { useApp } from '@/contexts/AppContext';
+import { getActiveProducts, getCategories, getOrders, addOrder, addAuditLog, addNotification, TABLE_COUNT, upsertLoyaltyMember, formatMoney } from '@/utils/store';
+import { subscribePhase2Events } from '@/utils/api';
 import CategoryIcon from '@/components/CategoryIcon';
-import type { Product, CartItem, Category, Supplement } from '@/types';
+import type { Product, CartItem, Category, Supplement, Order } from '@/types';
 
 export default function Menu() {
   const navigate = useNavigate();
   const { t } = useT();
+  const { syncTick } = useApp();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -28,8 +30,6 @@ export default function Menu() {
   const [selectedTable, setSelectedTable] = useState<number | null>(null);
   const [occupiedTables, setOccupiedTables] = useState<number[]>([]);
   const [orderError, setOrderError] = useState('');
-  const [submittingOrder, setSubmittingOrder] = useState(false);
-  const [orderTakingLong, setOrderTakingLong] = useState(false);
   // Keep the checkout compact on desktop/tablets: optional note/VIP fields are
   // expandable, while the Confirm button stays visible at all times.
   const [checkoutOptionsOpen, setCheckoutOptionsOpen] = useState(false);
@@ -48,49 +48,33 @@ export default function Menu() {
   // Supplement chooser
   const [suppProduct, setSuppProduct] = useState<Product | null>(null);
   const [chosenSupps, setChosenSupps] = useState<Supplement[]>([]);
-  // Persisted through a retry so a slow phone response never creates duplicate orders.
-  const pendingRequestId = useRef<string | null>(null);
-
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ['start start', 'end start'] });
   const heroY = useTransform(scrollYProgress, [0, 1], ['0%', '50%']);
   const heroOpacity = useTransform(scrollYProgress, [0, 1], [1, 0]);
 
-  // Phase 2: load only public menu data, not the full café snapshot.
+  // Stability mode: menu/order UX is local-first and confirms instantly.
+  // PostgreSQL sync happens in the background through the optimized state sync.
   useEffect(() => {
-    let alive = true;
-    Promise.all([getV2Products(), getV2Categories()])
-      .then(([productRes, categoryRes]) => {
-        if (!alive) return;
-        setProducts(productRes.data);
-        setCategories(categoryRes.data);
-      })
-      .catch(() => {
-        // Compatibility fallback while a deployment is rolling out.
-        if (!alive) return;
-        setProducts(getActiveProducts());
-        setCategories(getCategories());
-      });
-    return () => { alive = false; };
+    setProducts(getActiveProducts());
+    setCategories(getCategories());
+  }, [syncTick]);
+
+  const refreshTables = useCallback(() => {
+    const taken = new Set<number>();
+    getOrders().forEach((order) => {
+      if (order.tableNumber && order.status !== 'Cancelled' && order.status !== 'Paid') taken.add(order.tableNumber);
+    });
+    setOccupiedTables(Array.from(taken));
   }, []);
 
-  const refreshTables = useCallback(async () => {
-    try {
-      const response = await getV2Tables();
-      setOccupiedTables(response.data.filter((table) => table.state !== 'free').map((table) => table.number));
-    } catch { /* UI keeps last known table state */ }
-  }, []);
-
-  // Only subscribe while the client is choosing a table. SSE sends a tiny event;
-  // we then refetch only /api/v2/tables (not orders/invoices/staff/logs).
   useEffect(() => {
     if (!cartOpen) return;
-    void refreshTables();
-    const unsubscribe = subscribePhase2Events('client', () => { void refreshTables(); }, () => { void refreshTables(); });
-    // Tiny table-only fallback: no manual refresh needed after mobile/PWA wake-up.
-    const safety = setInterval(() => { void refreshTables(); }, 4_000);
-    return () => { unsubscribe(); clearInterval(safety); };
-  }, [cartOpen, refreshTables]);
+    refreshTables();
+    // SSE gives instant table refresh. syncTick is the cross-device safety net.
+    const unsubscribe = subscribePhase2Events('client', refreshTables, refreshTables);
+    return unsubscribe;
+  }, [cartOpen, syncTick, refreshTables]);
 
   const filtered = products.filter((p) => {
     const catMatch = activeCategory === 'All' || p.category === activeCategory;
@@ -148,54 +132,45 @@ export default function Menu() {
   const total = cart.reduce((s, i) => s + i.price * i.quantity, 0);
   const totalItems = cart.reduce((s, i) => s + i.quantity, 0);
 
-  const placeOrder = async () => {
+  const placeOrder = () => {
     const tableNumber = selectedTable;
     if (!tableNumber || tableNumber < 1 || tableNumber > TABLE_COUNT || !cart.length) return;
     setOrderError('');
-    setSubmittingOrder(true);
-    setOrderTakingLong(false);
-    const slowTimer = window.setTimeout(() => setOrderTakingLong(true), 6_000);
-    // Same key is reused after timeout/retry: server returns existing order.
-    if (!pendingRequestId.current) {
-      pendingRequestId.current = typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    }
-    try {
-      const response = await createV2Order({
-        tableNumber,
-        items: cart,
-        clientName: `Table ${tableNumber}`,
-        note: orderNote.trim() || undefined,
-        loyaltyName: loyaltyName.trim() || undefined,
-        requestId: pendingRequestId.current,
-        // The device that previously ordered for this table may add more items.
-        allowAddToExisting: myTable === tableNumber,
-      });
-      const order = response.data;
-      localStorage.setItem('hebli_client_name', order.clientName);
-      localStorage.setItem('hebli_client_table', String(tableNumber));
-      localStorage.setItem('hebli_last_order_id', order.id);
-      setMyTable(tableNumber);
-      setOrderId(order.id);
-      setFinalTotal(order.total);
-      setOrderNote('');
-      setLoyaltyName('');
-      setOrderPlaced(true);
-      pendingRequestId.current = null;
-      setCart([]);
-      setSelectedTable(null);
-      void refreshTables();
-    } catch (error: any) {
-      if (error?.code === 'table_occupied') setOrderError('Cette table est déjà occupée. Veuillez choisir une autre table.');
-      else if (error?.code === 'cafe_wifi_required') setOrderError('Connectez-vous au Wi-Fi du café pour commander.');
-      else if (error?.code === 'request_timeout' || error?.code === 'network_error' || error?.code === 'request_failed') setOrderError('Le serveur ne répond pas. Vérifiez votre connexion puis réessayez.');
-      else setOrderError('La commande n’a pas été envoyée. Réessayez.');
-    } finally {
-      window.clearTimeout(slowTimer);
-      setOrderTakingLong(false);
-      setSubmittingOrder(false);
-    }
+
+    // Stable local-first order: confirmation is immediate. atomicWrite schedules
+    // PostgreSQL sync in the background; it never blocks the customer checkout.
+    const id = 'ORD-' + String(Date.now()).slice(-8);
+    const loyaltyId = loyaltyName.trim() ? upsertLoyaltyMember(loyaltyName.trim()) : undefined;
+    const now = new Date().toISOString();
+    const order: Order = {
+      id,
+      clientName: `Table ${tableNumber}`,
+      items: [...cart],
+      total,
+      status: 'Pending',
+      note: orderNote.trim() || undefined,
+      tableNumber,
+      loyaltyId,
+      createdAt: now,
+      updatedAt: now,
+    };
+    addOrder(order);
+    addAuditLog({ id: 'log-' + Date.now(), action: 'Order Placed', details: `Order ${id} for Table ${tableNumber} • ${formatMoney(total)}`, user: order.clientName, timestamp: now });
+    addNotification({ id: 'ntf-' + Date.now() + '-b', target: 'Barista', title: 'New Order', body: `${id} • Table ${tableNumber} • ${formatMoney(total)}`, type: 'order', read: false, createdAt: now });
+    addNotification({ id: 'ntf-' + Date.now() + '-w', target: 'Cashier', title: 'New Order', body: `${id} • Table ${tableNumber} • ${formatMoney(total)}`, type: 'order', read: false, createdAt: now });
+
+    localStorage.setItem('hebli_client_name', order.clientName);
+    localStorage.setItem('hebli_client_table', String(tableNumber));
+    localStorage.setItem('hebli_last_order_id', order.id);
+    setMyTable(tableNumber);
+    setOrderId(order.id);
+    setFinalTotal(order.total);
+    setOrderNote('');
+    setLoyaltyName('');
+    setOrderPlaced(true); // confirmation modal shows immediately
+    setCart([]);
+    setSelectedTable(null);
+    refreshTables();
   };
 
   return (
@@ -562,7 +537,7 @@ export default function Menu() {
                                 key={num}
                                 type="button"
                                 disabled={locked}
-                                onClick={() => { setSelectedTable(num); setOrderError(''); pendingRequestId.current = null; }}
+                                onClick={() => { setSelectedTable(num); setOrderError(''); }}
                                 className={`relative flex aspect-[1.15] flex-col items-center justify-center rounded-xl border text-center transition-all active:scale-[0.95] ${
                                   locked
                                     ? 'border-white/[0.04] bg-white/[0.01] text-white/15 cursor-not-allowed'
@@ -613,14 +588,10 @@ export default function Menu() {
                     {orderError && <p className="text-center text-xs text-red-400">{orderError}</p>}
                     <button
                       onClick={placeOrder}
-                      disabled={!selectedTable || submittingOrder}
+                      disabled={!selectedTable}
                       className="w-full rounded-2xl bg-[#D4AF37] py-3.5 text-base font-bold text-black hover:bg-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-[0.98] shadow-[0_10px_30px_-10px_rgba(212,175,55,0.6)]"
                     >
-                      {submittingOrder
-                        ? orderTakingLong
-                          ? 'Connexion sécurisée au serveur…'
-                          : 'Envoi de la commande…'
-                        : selectedTable
+                      {selectedTable
                         ? `${t('cart.placeOrder')} · Table ${selectedTable} · ${formatMoney(total)}`
                         : `${t('cart.chooseTable')} · ${formatMoney(total)}`}
                     </button>
