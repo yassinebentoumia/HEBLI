@@ -206,6 +206,8 @@ app.get('/api/health', (_req, res) => {
     aiProvider: aiProvider(),
     persistence: persistenceMode, // MUST be "postgres" before official opening
     databaseConfigured: !!process.env.DATABASE_URL,
+    phase2: true,
+    realtimeClients: typeof sseClients === 'undefined' ? 0 : sseClients.size,
   });
 });
 
@@ -456,12 +458,13 @@ function sessionPublic(staff) {
   return { id: staff.id, name: staff.name, role: staff.role, active: staff.active, rating: staff.rating };
 }
 
+const SECURE_COOKIE = process.env.NODE_ENV === 'production' || !!process.env.RENDER;
 function setSessionCookie(res, token) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = SECURE_COOKIE ? '; Secure' : '';
   res.setHeader('Set-Cookie', `${AUTH_COOKIE}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.floor(AUTH_TTL_MS / 1000)}${secure}`);
 }
 function clearSessionCookie(res) {
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  const secure = SECURE_COOKIE ? '; Secure' : '';
   res.setHeader('Set-Cookie', `${AUTH_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secure}`);
 }
 
@@ -744,7 +747,7 @@ app.patch('/api/v2/orders/:id', requireAuth(['Barista', 'Administrator']), async
   res.json({ data: publicOrder(order), updatedAt });
 });
 
-app.post('/api/v2/orders/:id/cancel, requireAuth(['Administrator']), async (req, res) => {
+app.post('/api/v2/orders/:id/cancel', requireAuth(['Administrator']), async (req, res) => {
   const order = collection('hebli_orders').find((o) => o.id === req.params.id);
   if (!order) return res.status(404).json({ error: 'order_not_found' });
   if (order.status === 'Paid') return res.status(409).json({ error: 'paid_order_cannot_be_cancelled' });
@@ -917,7 +920,7 @@ app.post('/api/wifi-lock', (req, res) => {
 });
 
 // POST partial state → server merges with existing
-app.post('/api/state', (req, res) => {
+app.post('/api/state', async (req, res) => {
   const incoming = req.body || {};
 
   // 1) Merge tombstones FIRST so subsequent array merges respect them.
@@ -955,9 +958,11 @@ app.post('/api/state', (req, res) => {
     }
   });
 
-  state._updatedAt = Date.now();
-  persist();
-  res.json({ ok: true, _updatedAt: state._updatedAt });
+  // Legacy compatibility write: persist durably then tell SSE clients to refresh
+  // their small V2 resource endpoints. This keeps Owner/Invoices/Chat modules
+  // working while they are migrated screen by screen.
+  const updatedAt = await commitState('state.updated', {}, 'all');
+  res.json({ ok: true, _updatedAt: updatedAt });
 });
 
 // ============================================================

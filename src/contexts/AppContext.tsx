@@ -6,7 +6,6 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type { Staff, Order } from '@/types';
 import {
   initializeData,
-  getCurrentUser,
   getOrders,
   getStaff,
   loginStaff,
