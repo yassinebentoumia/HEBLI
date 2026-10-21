@@ -52,10 +52,10 @@ export class PostgresStateStore {
       // Render app has a small number of writes; don't open a huge connection pool.
       max: 5,
       idleTimeoutMillis: 20_000,
-      connectionTimeoutMillis: 8_000,
-      // Never let a stuck/slow database query freeze the café checkout forever.
-      query_timeout: 8_000,
-      statement_timeout: 8_000,
+      // Neon Free can take a little time to wake from scale-to-zero. Do NOT use
+      // an 8-second global query timeout here: it can kill the entire Render
+      // startup before Neon wakes. Checkout has its own browser-side timeout.
+      connectionTimeoutMillis: 30_000,
     });
   }
 
